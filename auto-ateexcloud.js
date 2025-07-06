@@ -15,21 +15,18 @@
 (function () {
   "use strict";
 
-  // Global flag để tránh multiple instances
   if (window.ateexAutoRunning) {
     console.log("[Ateex Auto] Script already running, skipping...");
     return;
   }
   window.ateexAutoRunning = true;
 
-  // Global state để đồng bộ giữa iframe và main page
   if (!window.ateexGlobalState) {
     window.ateexGlobalState = {
       captchaSolved: false,
       captchaInProgress: false,
       lastSolvedTime: 0,
       lastAutomatedQueriesTime: 0,
-      // Counter stats
       totalCycles: 0,
       totalCoins: 0,
       startTime: Date.now(),
@@ -37,13 +34,10 @@
     };
   }
 
-  // Cấu hình thông tin đăng nhập
   const CONFIG = {
-    email: "huytqd@gmail.com", // Thay bằng email của bạn
-    password: "0123321123", // Thay bằng password của bạn
+    email: "huytqd@gmail.com",
+    password: "0123321123",
   };
-
-  // Utility functions
   function log(message) {
     console.log(`[Ateex Auto] ${message}`);
   }
@@ -52,13 +46,10 @@
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Counter và UI functions
   function createCounterUI() {
-    // Tránh tạo multiple UI - kiểm tra cả window level
     if (document.getElementById("ateex-counter") || window.ateexCounterCreated)
       return;
 
-    // Chỉ tạo counter trên main window, không phải iframe
     if (window.top !== window.self) return;
 
     const counterDiv = document.createElement("div");
@@ -97,7 +88,6 @@
   }
 
   function updateCounter() {
-    // Chỉ update counter trên main window
     if (window.top !== window.self) return;
 
     const counter = document.getElementById("ateex-counter");
@@ -114,7 +104,6 @@
     const coinsPerHour =
       runtime > 0 ? Math.round((state.totalCoins * 3600000) / runtime) : 0;
 
-    // ETA for 1000 coins
     const coinsNeeded = 1000 - state.totalCoins;
     const cyclesNeeded = Math.ceil(coinsNeeded / 15);
     const etaMs = cyclesNeeded * avgCycleTime;
@@ -145,7 +134,6 @@
       ).textContent = `ETA 1000: ${etaHours}h ${etaMinutes % 60}m`;
     }
 
-    // Show next Google cookies clear
     const cyclesUntilClear = 10 - (state.totalCycles % 10);
     if (cyclesUntilClear === 10) {
       document.getElementById("next-clear").textContent = `🧹 Cookies cleared!`;
@@ -157,7 +145,6 @@
   }
 
   function incrementCycle() {
-    // Chỉ increment từ main window
     if (window.top !== window.self) return;
 
     window.ateexGlobalState.totalCycles++;
@@ -169,13 +156,11 @@
     );
     updateCounter();
 
-    // Clear Google cookies mỗi 10 cycles để tránh bị limit
     if (window.ateexGlobalState.totalCycles % 10 === 0) {
       log("Preventive Google cookies clearing (every 10 cycles)");
-      clearGoogleCookies(false); // Không reload cho preventive clear
+      clearGoogleCookies(false);
     }
 
-    // Save to localStorage để persist qua sessions
     try {
       localStorage.setItem(
         "ateex_stats",
@@ -208,25 +193,20 @@
   }
 
   async function clearBrowserData() {
-    // Backup stats trước khi clear
     const savedStats = localStorage.getItem("ateex_stats");
 
-    // Xóa localStorage
     localStorage.clear();
-    // Xóa sessionStorage
     sessionStorage.clear();
 
-    // Restore stats
     if (savedStats) {
       localStorage.setItem("ateex_stats", savedStats);
     }
-    // Xóa cookies (cải thiện từ script tham khảo)
+
     document.cookie.split(";").forEach(c => {
       const name = c.split("=")[0].trim();
       document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
     });
 
-    // Xóa IndexedDB nếu có
     if (window.indexedDB && indexedDB.databases) {
       indexedDB.databases().then(dbs => {
         for (const db of dbs) {
@@ -235,18 +215,13 @@
       });
     }
 
-    // Xóa Google cookies để reset captcha limits (không reload vì sẽ logout)
     await clearGoogleCookies(false);
-
     log("Browser data cleared");
   }
 
   async function clearGoogleCookies(shouldReload = false) {
     try {
-      // Xóa Google cookies và ALL storage để reset captcha limits
       log("Deep clearing ALL Google storage to reset reCAPTCHA limits...");
-
-      // 1. Xóa cookies Google trực tiếp (enhanced list)
       const googleCookieNames = [
         "NID",
         "1P_JAR",
@@ -272,7 +247,6 @@
       ];
 
       googleCookieNames.forEach(cookieName => {
-        // Xóa cho các domain Google
         const domains = [
           ".google.com",
           ".google.co.uk",
@@ -288,7 +262,6 @@
         });
       });
 
-      // 2. Xóa localStorage và sessionStorage (enhanced)
       try {
         Object.keys(localStorage).forEach(key => {
           if (
@@ -317,7 +290,6 @@
         log("Storage clearing error: " + e.message);
       }
 
-      // 3. Xóa IndexedDB databases của Google
       try {
         if (window.indexedDB && indexedDB.databases) {
           const databases = await indexedDB.databases();
@@ -338,7 +310,6 @@
         log("IndexedDB clearing error: " + e.message);
       }
 
-      // 4. Clear Cache Storage
       try {
         if ("caches" in window) {
           const cacheNames = await caches.keys();
@@ -358,7 +329,6 @@
         log("Cache clearing error: " + e.message);
       }
 
-      // 5. Unregister Service Workers
       try {
         if ("serviceWorker" in navigator) {
           const registrations =
@@ -379,15 +349,12 @@
 
       log("Deep Google storage clearing completed successfully");
 
-      // Chỉ reload khi cần thiết (khi detect automated queries)
       if (shouldReload) {
         setTimeout(() => {
           log("Reloading page to reset reCAPTCHA state...");
 
-          // Nếu đang trong iframe, gửi message lên parent để reload
           if (window.top !== window.self) {
             try {
-              // Gửi message lên parent window
               window.top.postMessage(
                 {
                   type: "ateex_reload_required",
@@ -395,10 +362,8 @@
                 },
                 "*"
               );
-
               log("Sent reload request to parent window");
             } catch (e) {
-              // Fallback: thử reload trực tiếp
               try {
                 window.top.location.reload();
               } catch (e2) {
@@ -406,7 +371,6 @@
               }
             }
           } else {
-            // Nếu đang ở main window
             window.location.reload();
           }
         }, 2000);
@@ -417,7 +381,6 @@
   }
 
   function logout() {
-    // Tìm form logout (giống như script tham khảo)
     const logoutForm = document.querySelector('form[action*="/logout"]');
     if (logoutForm) {
       log("Logout form found, submitting...");
@@ -425,7 +388,6 @@
       return;
     }
 
-    // Fallback: tìm và click nút logout
     const logoutButton =
       document.querySelector('a[href*="logout"]') ||
       document.querySelector('button[onclick*="logout"]') ||
@@ -435,19 +397,16 @@
       logoutButton.click();
       log("Logout button clicked");
     } else {
-      // Nếu không tìm thấy, chuyển thẳng đến URL logout
       log("No logout form/button found, redirecting to logout URL");
       window.location.href = "https://dash.ateex.cloud/logout";
     }
   }
 
-  // ============= TÍCH HỢP RECAPTCHA SOLVER =============
+  // reCAPTCHA Solver Integration
   var solved = false;
   var checkBoxClicked = false;
   var waitingForAudioResponse = false;
   var captchaInterval = null;
-
-  // Node Selectors cho reCAPTCHA
   const CHECK_BOX = ".recaptcha-checkbox-border";
   const AUDIO_BUTTON = "#recaptcha-audio-button";
   const AUDIO_SOURCE = "#audio-source";
@@ -471,12 +430,10 @@
   ];
   var latencyList = Array(serversList.length).fill(10000);
 
-  // Helper function
   function qSelector(selector) {
     return document.querySelector(selector);
   }
 
-  // Khởi tạo language và status an toàn
   function initRecaptchaVars() {
     try {
       const htmlLang = qSelector("html");
@@ -1095,13 +1052,11 @@
     }
   }
 
-  // Cleanup function
   function cleanup() {
     if (captchaInterval) {
       clearInterval(captchaInterval);
     }
 
-    // Remove counter UI
     const counter = document.getElementById("ateex-counter");
     if (counter) {
       counter.remove();
@@ -1111,10 +1066,8 @@
     window.ateexCounterCreated = false;
   }
 
-  // Cleanup khi trang unload
   window.addEventListener("beforeunload", cleanup);
 
-  // Chạy script sau khi trang load xong
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", main);
   } else {
