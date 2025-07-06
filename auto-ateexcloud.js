@@ -28,6 +28,7 @@
       captchaSolved: false,
       captchaInProgress: false,
       lastSolvedTime: 0,
+      lastAutomatedQueriesTime: 0,
       // Counter stats
       totalCycles: 0,
       totalCoins: 0,
@@ -206,7 +207,7 @@
     }
   }
 
-  function clearBrowserData() {
+  async function clearBrowserData() {
     // Backup stats trước khi clear
     const savedStats = localStorage.getItem("ateex_stats");
 
@@ -235,17 +236,17 @@
     }
 
     // Xóa Google cookies để reset captcha limits (không reload vì sẽ logout)
-    clearGoogleCookies(false);
+    await clearGoogleCookies(false);
 
     log("Browser data cleared");
   }
 
-  function clearGoogleCookies(shouldReload = false) {
+  async function clearGoogleCookies(shouldReload = false) {
     try {
-      // Xóa Google cookies để reset captcha limits
-      log("Clearing Google cookies to reset reCAPTCHA limits...");
+      // Xóa Google cookies và ALL storage để reset captcha limits
+      log("Deep clearing ALL Google storage to reset reCAPTCHA limits...");
 
-      // Xóa cookies Google trực tiếp nếu có thể
+      // 1. Xóa cookies Google trực tiếp (enhanced list)
       const googleCookieNames = [
         "NID",
         "1P_JAR",
@@ -263,6 +264,11 @@
         "SID",
         "SIDCC",
         "SSID",
+        "SEARCH_SAMESITE",
+        "OTZ",
+        "ANID",
+        "IDE",
+        "__Secure-ENID",
       ];
 
       googleCookieNames.forEach(cookieName => {
@@ -273,6 +279,8 @@
           ".google.ca",
           ".googleapis.com",
           ".gstatic.com",
+          ".recaptcha.net",
+          ".google-analytics.com",
         ];
         domains.forEach(domain => {
           document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${domain}`;
@@ -280,13 +288,15 @@
         });
       });
 
-      // Xóa localStorage và sessionStorage của Google nếu có
+      // 2. Xóa localStorage và sessionStorage (enhanced)
       try {
         Object.keys(localStorage).forEach(key => {
           if (
             key.includes("google") ||
             key.includes("recaptcha") ||
-            key.includes("captcha")
+            key.includes("captcha") ||
+            key.includes("gapi") ||
+            key.includes("analytics")
           ) {
             localStorage.removeItem(key);
           }
@@ -296,22 +306,109 @@
           if (
             key.includes("google") ||
             key.includes("recaptcha") ||
-            key.includes("captcha")
+            key.includes("captcha") ||
+            key.includes("gapi") ||
+            key.includes("analytics")
           ) {
             sessionStorage.removeItem(key);
           }
         });
       } catch (e) {
-        // Ignore storage errors
+        log("Storage clearing error: " + e.message);
       }
 
-      log("Google cookies cleared successfully");
+      // 3. Xóa IndexedDB databases của Google
+      try {
+        if (window.indexedDB && indexedDB.databases) {
+          const databases = await indexedDB.databases();
+          for (const db of databases) {
+            if (
+              db.name &&
+              (db.name.includes("google") ||
+                db.name.includes("recaptcha") ||
+                db.name.includes("gapi") ||
+                db.name.includes("analytics"))
+            ) {
+              indexedDB.deleteDatabase(db.name);
+              log(`Deleted IndexedDB: ${db.name}`);
+            }
+          }
+        }
+      } catch (e) {
+        log("IndexedDB clearing error: " + e.message);
+      }
+
+      // 4. Clear Cache Storage
+      try {
+        if ("caches" in window) {
+          const cacheNames = await caches.keys();
+          for (const cacheName of cacheNames) {
+            if (
+              cacheName.includes("google") ||
+              cacheName.includes("recaptcha") ||
+              cacheName.includes("gapi") ||
+              cacheName.includes("analytics")
+            ) {
+              await caches.delete(cacheName);
+              log(`Deleted cache: ${cacheName}`);
+            }
+          }
+        }
+      } catch (e) {
+        log("Cache clearing error: " + e.message);
+      }
+
+      // 5. Unregister Service Workers
+      try {
+        if ("serviceWorker" in navigator) {
+          const registrations =
+            await navigator.serviceWorker.getRegistrations();
+          for (const registration of registrations) {
+            if (
+              registration.scope.includes("google") ||
+              registration.scope.includes("recaptcha")
+            ) {
+              await registration.unregister();
+              log(`Unregistered SW: ${registration.scope}`);
+            }
+          }
+        }
+      } catch (e) {
+        log("Service Worker clearing error: " + e.message);
+      }
+
+      log("Deep Google storage clearing completed successfully");
 
       // Chỉ reload khi cần thiết (khi detect automated queries)
       if (shouldReload) {
         setTimeout(() => {
           log("Reloading page to reset reCAPTCHA state...");
-          window.location.reload();
+
+          // Nếu đang trong iframe, gửi message lên parent để reload
+          if (window.top !== window.self) {
+            try {
+              // Gửi message lên parent window
+              window.top.postMessage(
+                {
+                  type: "ateex_reload_required",
+                  reason: "google_cookies_cleared",
+                },
+                "*"
+              );
+
+              log("Sent reload request to parent window");
+            } catch (e) {
+              // Fallback: thử reload trực tiếp
+              try {
+                window.top.location.reload();
+              } catch (e2) {
+                window.location.reload();
+              }
+            }
+          } else {
+            // Nếu đang ở main window
+            window.location.reload();
+          }
         }, 2000);
       }
     } catch (error) {
@@ -518,6 +615,25 @@
       return;
     }
 
+    // Kiểm tra cooldown period sau automated queries
+    if (window.ateexGlobalState.lastAutomatedQueriesTime) {
+      const timeSinceLastError =
+        Date.now() - window.ateexGlobalState.lastAutomatedQueriesTime;
+      const cooldownPeriod = 60000; // 60 giây cooldown
+
+      if (timeSinceLastError < cooldownPeriod) {
+        const remainingTime = Math.ceil(
+          (cooldownPeriod - timeSinceLastError) / 1000
+        );
+        log(`Cooldown active, waiting ${remainingTime}s before retry`);
+
+        setTimeout(() => {
+          initCaptchaSolver();
+        }, 5000); // Check lại sau 5 giây
+        return;
+      }
+    }
+
     // Kiểm tra nếu solver đang chạy
     if (window.ateexGlobalState.captchaInProgress && captchaInterval) {
       log("reCAPTCHA solver already in progress, skipping");
@@ -545,7 +661,7 @@
     }
 
     // Solve the captcha using audio - theo script gốc
-    captchaInterval = setInterval(function () {
+    captchaInterval = setInterval(async function () {
       try {
         if (
           !checkBoxClicked &&
@@ -649,14 +765,17 @@
           qSelector(DOSCAPTCHA).innerText.length > 0
         ) {
           log(
-            "Automated Queries Detected - clearing Google cookies and reloading"
+            "Automated Queries Detected - clearing storage and implementing cooldown"
           );
 
           // Clear Google cookies và reload để reset limits
-          clearGoogleCookies(true);
+          await clearGoogleCookies(true);
 
           window.ateexGlobalState.captchaInProgress = false;
           clearInterval(captchaInterval);
+
+          // Set cooldown period để tránh immediate retry
+          window.ateexGlobalState.lastAutomatedQueriesTime = Date.now();
 
           // Không cần setTimeout vì sẽ reload trang
         }
@@ -722,7 +841,7 @@
           await sleep(2000);
 
           // Xóa dữ liệu browser
-          clearBrowserData();
+          await clearBrowserData();
         } else {
           log("Clickcoin Start link not found");
           // Fallback: tìm button trong row
@@ -735,7 +854,7 @@
             incrementCycle();
             logout();
             await sleep(2000);
-            clearBrowserData();
+            await clearBrowserData();
           } else {
             log("No Start button found in Clickcoin row");
           }
@@ -897,13 +1016,34 @@
     }
   }
 
+  // Setup message listener cho reload requests từ iframe
+  function setupReloadListener() {
+    // Chỉ setup trên main window
+    if (window.top !== window.self) return;
+
+    window.addEventListener("message", function (event) {
+      if (event.data && event.data.type === "ateex_reload_required") {
+        log(`Received reload request from iframe: ${event.data.reason}`);
+        setTimeout(() => {
+          log("Reloading main page as requested by iframe");
+          window.location.reload();
+        }, 1000);
+      }
+    });
+
+    log("Reload listener setup completed");
+  }
+
   // Hàm chính
-  function main() {
+  async function main() {
     const currentPath = window.location.pathname;
     const currentUrl = window.location.href;
 
     log(`Current path: ${currentPath}`);
     log(`Current URL: ${currentUrl}`);
+
+    // Setup reload listener trên main window
+    setupReloadListener();
 
     // Xử lý reCAPTCHA iframe riêng biệt - KHÔNG tạo UI
     if (currentUrl.includes("recaptcha")) {
@@ -944,7 +1084,7 @@
     } else if (currentPath.includes("/logout")) {
       // Xử lý trang logout - xóa dữ liệu và chuyển đến login
       log("On logout page, clearing data and redirecting to login");
-      clearBrowserData();
+      await clearBrowserData();
       setTimeout(() => {
         window.location.href = "https://dash.ateex.cloud/login";
       }, 1000);
