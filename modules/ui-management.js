@@ -14,6 +14,7 @@ const {
   logSuccess,
   logWarning,
   logDebug,
+  logWithSpamControl,
   createElement,
   addStyles,
   formatDuration,
@@ -281,7 +282,8 @@ function updateCounter() {
     etaEl.textContent = `ETA Target: ${targetProgress.eta}`;
   }
 
-  logDebug("Counter UI updated");
+  // Use spam control for debug logging
+  logWithSpamControl("Counter UI updated", "DEBUG", "counter_update", 10000);
 }
 
 // ============= SETTINGS DROPDOWN =============

@@ -113,12 +113,33 @@ function handleErrorPage() {
 }
 
 /**
- * Logout function
+ * Logout function - improved version from original script
  */
 function logout() {
   try {
     logInfo("Performing logout...");
-    window.location.href = "https://dash.ateex.cloud/logout";
+
+    // First try to find logout form
+    const logoutForm = qSelector('form[action*="/logout"]');
+    if (logoutForm) {
+      logInfo("Logout form found, submitting...");
+      logoutForm.submit();
+      return;
+    }
+
+    // Then try to find logout button/link
+    const logoutButton =
+      qSelector('a[href*="logout"]') ||
+      qSelector('button[onclick*="logout"]') ||
+      qSelector(".logout");
+
+    if (logoutButton) {
+      logInfo("Logout button found, clicking...");
+      logoutButton.click();
+    } else {
+      logInfo("No logout form/button found, redirecting to logout URL");
+      window.location.href = "https://dash.ateex.cloud/logout";
+    }
   } catch (error) {
     logError(`Logout failed: ${error.message}`);
     // Fallback: clear data and go to login
@@ -173,7 +194,8 @@ async function handleEarnPage() {
     logWithSpamControl(
       "⏳ Earn page handler waiting - auto stats not enabled yet",
       "DEBUG",
-      "earn_page_waiting"
+      "earn_page_waiting",
+      30000 // Only log once per 30 seconds
     );
     return;
   }
@@ -262,7 +284,8 @@ async function handleLoginPage() {
     logWithSpamControl(
       "⏳ Login page handler waiting - auto stats not enabled yet",
       "DEBUG",
-      "login_page_waiting"
+      "login_page_waiting",
+      30000 // Only log once per 30 seconds
     );
     return;
   }
@@ -410,7 +433,8 @@ async function handleHomePage() {
     logWithSpamControl(
       "⏳ Home page handler waiting - auto stats not enabled yet",
       "DEBUG",
-      "home_page_waiting"
+      "home_page_waiting",
+      30000 // Only log once per 30 seconds
     );
     return;
   }

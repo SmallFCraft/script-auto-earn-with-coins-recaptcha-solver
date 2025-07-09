@@ -410,8 +410,13 @@ function initCaptchaSolver() {
         ateexGlobalState.credentialsReady = true;
       }
     } catch (e) {
-      // Cross-origin access might be blocked
-      logDebug("Cannot access parent window state");
+      // Cross-origin access might be blocked - use spam control
+      logWithSpamControl(
+        "Cannot access parent window state",
+        "DEBUG",
+        "parent_window_access",
+        60000 // Only log once per minute
+      );
     }
   }
 
@@ -419,7 +424,8 @@ function initCaptchaSolver() {
     logWithSpamControl(
       "reCAPTCHA blocked: Credentials not ready yet. Waiting...",
       "DEBUG",
-      "recaptcha_blocked"
+      "recaptcha_blocked",
+      30000 // Only log once per 30 seconds
     );
 
     // Wait and retry every 2 seconds until credentials are ready

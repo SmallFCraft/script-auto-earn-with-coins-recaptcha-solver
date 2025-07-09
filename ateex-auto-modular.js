@@ -22,10 +22,11 @@
 
   // ============= GLOBAL CONSTANTS =============
   const SCRIPT_VERSION = "3.0.0";
-  const GITHUB_BASE_URL = "https://raw.githubusercontent.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules";
+  const GITHUB_BASE_URL =
+    "https://raw.githubusercontent.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules";
   const MODULE_CACHE_PREFIX = "ateex_module_";
   const MODULE_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-  
+
   // Prevent multiple instances
   if (window.ateexAutoRunning) {
     console.log("[Ateex Auto v3.0] Script already running, skipping...");
@@ -40,7 +41,7 @@
       version: SCRIPT_VERSION,
       modulesLoaded: {},
       moduleLoadPromises: {},
-      
+
       // Legacy compatibility
       captchaSolved: false,
       captchaInProgress: false,
@@ -58,7 +59,7 @@
   }
 
   // ============= MODULE LOADING SYSTEM =============
-  
+
   /**
    * Module configuration with dependencies
    */
@@ -66,33 +67,33 @@
     utils: {
       file: "utils.js",
       dependencies: [],
-      description: "Core utilities and logging system"
+      description: "Core utilities and logging system",
     },
     credentials: {
-      file: "credentials.js", 
+      file: "credentials.js",
       dependencies: ["utils"],
-      description: "Secure credentials management"
+      description: "Secure credentials management",
     },
     data: {
       file: "data-management.js",
       dependencies: ["utils"],
-      description: "Stats and data management"
+      description: "Stats and data management",
     },
     ui: {
       file: "ui-management.js",
       dependencies: ["utils", "data"],
-      description: "UI components and management"
+      description: "UI components and management",
     },
     recaptcha: {
       file: "recaptcha-solver.js",
       dependencies: ["utils", "credentials"],
-      description: "reCAPTCHA solver with AI"
+      description: "reCAPTCHA solver with AI",
     },
     autoEarn: {
       file: "auto-earning.js",
       dependencies: ["utils", "credentials", "data", "ui", "recaptcha"],
-      description: "Auto-earning logic and page handlers"
-    }
+      description: "Auto-earning logic and page handlers",
+    },
   };
 
   /**
@@ -101,7 +102,7 @@
   function log(message, level = "INFO") {
     const timestamp = new Date().toLocaleTimeString();
     const prefix = `[Ateex Auto v${SCRIPT_VERSION}]`;
-    
+
     switch (level) {
       case "ERROR":
         console.error(`${prefix} [${timestamp}] ❌ ${message}`);
@@ -151,11 +152,11 @@
         // Check cache first
         const cacheKey = MODULE_CACHE_PREFIX + moduleName;
         const cached = GM_getValue(cacheKey);
-        
+
         if (cached) {
           const cacheData = JSON.parse(cached);
           const now = Date.now();
-          
+
           if (now - cacheData.timestamp < MODULE_CACHE_DURATION) {
             log(`Using cached module: ${moduleName}`, "DEBUG");
             const moduleExports = executeModule(cacheData.code, moduleName);
@@ -167,30 +168,32 @@
         // Fetch from GitHub
         const url = `${GITHUB_BASE_URL}/${config.file}`;
         log(`Fetching module from: ${url}`, "DEBUG");
-        
+
         const code = await fetchModuleCode(url);
-        
+
         // Cache the module
-        GM_setValue(cacheKey, JSON.stringify({
-          code: code,
-          timestamp: Date.now(),
-          version: SCRIPT_VERSION
-        }));
+        GM_setValue(
+          cacheKey,
+          JSON.stringify({
+            code: code,
+            timestamp: Date.now(),
+            version: SCRIPT_VERSION,
+          })
+        );
 
         // Execute module
         const moduleExports = executeModule(code, moduleName);
         window.ateexGlobalState.modulesLoaded[moduleName] = moduleExports;
-        
+
         log(`Successfully loaded module: ${moduleName}`, "SUCCESS");
         return moduleExports;
-
       } catch (error) {
         log(`Failed to load module ${moduleName}: ${error.message}`, "ERROR");
-        
+
         // Try to use cached version as fallback
         const cacheKey = MODULE_CACHE_PREFIX + moduleName;
         const cached = GM_getValue(cacheKey);
-        
+
         if (cached) {
           log(`Using stale cache as fallback for: ${moduleName}`, "WARN");
           const cacheData = JSON.parse(cached);
@@ -198,7 +201,7 @@
           window.ateexGlobalState.modulesLoaded[moduleName] = moduleExports;
           return moduleExports;
         }
-        
+
         throw error;
       }
     })();
@@ -216,19 +219,23 @@
         method: "GET",
         url: url,
         timeout: 30000,
-        onload: function(response) {
+        onload: function (response) {
           if (response.status === 200) {
             resolve(response.responseText);
           } else {
-            reject(new Error(`HTTP ${response.status}: ${response.statusText}`));
+            reject(
+              new Error(`HTTP ${response.status}: ${response.statusText}`)
+            );
           }
         },
-        onerror: function(error) {
-          reject(new Error(`Network error: ${error.message || 'Unknown error'}`));
+        onerror: function (error) {
+          reject(
+            new Error(`Network error: ${error.message || "Unknown error"}`)
+          );
         },
-        ontimeout: function() {
+        ontimeout: function () {
           reject(new Error("Request timeout"));
-        }
+        },
       });
     });
   }
@@ -250,7 +257,7 @@
         ateexGlobalState: window.ateexGlobalState,
         log: log,
         loadModule: loadModule,
-        MODULE_NAME: moduleName
+        MODULE_NAME: moduleName,
       };
 
       // Execute module code
@@ -268,7 +275,7 @@
 
       const moduleExports = moduleFunction(...Object.values(moduleContext));
       log(`Module ${moduleName} executed successfully`, "DEBUG");
-      
+
       return moduleExports;
     } catch (error) {
       log(`Error executing module ${moduleName}: ${error.message}`, "ERROR");
@@ -282,21 +289,21 @@
   async function initializeApp() {
     try {
       log("🚀 Initializing Ateex Auto v3.0 - Modular Edition", "SUCCESS");
-      
+
       // Load core modules first
       log("Loading core modules...", "INFO");
-      
+
       const utils = await loadModule("utils");
       const credentials = await loadModule("credentials");
       const data = await loadModule("data");
       const ui = await loadModule("ui");
-      
+
       log("Core modules loaded successfully", "SUCCESS");
-      
+
       // Initialize based on current page
       const currentUrl = window.location.href;
       const currentPath = window.location.pathname;
-      
+
       // Handle reCAPTCHA iframe separately
       if (currentUrl.includes("recaptcha")) {
         log("Detected reCAPTCHA iframe, loading solver...", "INFO");
@@ -306,22 +313,21 @@
         }
         return;
       }
-      
+
       // Load auto-earning module for main pages
       if (window.top === window.self) {
         log("Loading auto-earning module...", "INFO");
         const autoEarn = await loadModule("autoEarn");
-        
+
         if (autoEarn && autoEarn.initialize) {
           await autoEarn.initialize();
         }
-        
+
         log("🎉 Ateex Auto v3.0 initialized successfully!", "SUCCESS");
       }
-      
     } catch (error) {
       log(`Failed to initialize application: ${error.message}`, "ERROR");
-      
+
       // Fallback to legacy mode if available
       if (window.ateexLegacyMode) {
         log("Attempting to fallback to legacy mode...", "WARN");
@@ -333,7 +339,7 @@
   /**
    * Clear module cache (for development/debugging)
    */
-  window.ateexClearModuleCache = function() {
+  window.ateexClearModuleCache = function () {
     Object.keys(MODULE_CONFIG).forEach(moduleName => {
       const cacheKey = MODULE_CACHE_PREFIX + moduleName;
       GM_deleteValue(cacheKey);
@@ -342,25 +348,43 @@
   };
 
   /**
+   * Clear spam logs and reset spam tracker
+   */
+  window.ateexClearSpamLogs = function () {
+    // Clear console
+    console.clear();
+
+    // Reset spam tracker if utils module is loaded
+    if (window.ateexGlobalState.modulesLoaded.utils) {
+      const utils = window.ateexGlobalState.modulesLoaded.utils;
+      if (utils.logSpamTracker) {
+        utils.logSpamTracker.clear();
+        log("Spam log tracker cleared", "INFO");
+      }
+    }
+
+    log("Console and spam logs cleared", "SUCCESS");
+  };
+
+  /**
    * Get module loading status
    */
-  window.ateexGetModuleStatus = function() {
+  window.ateexGetModuleStatus = function () {
     const status = {};
     Object.keys(MODULE_CONFIG).forEach(moduleName => {
       status[moduleName] = {
         loaded: !!window.ateexGlobalState.modulesLoaded[moduleName],
         loading: !!window.ateexGlobalState.moduleLoadPromises[moduleName],
-        config: MODULE_CONFIG[moduleName]
+        config: MODULE_CONFIG[moduleName],
       };
     });
     return status;
   };
 
   // ============= STARTUP =============
-  
+
   // Start the application
   initializeApp().catch(error => {
     log(`Critical error during startup: ${error.message}`, "ERROR");
   });
-
 })();
