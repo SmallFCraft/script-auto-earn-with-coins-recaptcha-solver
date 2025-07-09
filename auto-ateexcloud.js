@@ -542,10 +542,13 @@
 
   async function initialize() {
     try {
-      log("Initializing Ateex Auto Script with Module Loader...", "INFO");
+      context.log(
+        "Initializing Ateex Auto Script with Module Loader...",
+        "INFO"
+      );
 
       // Create module loader
-      const moduleLoader = new ModuleLoader(MODULE_CONFIG);
+      const moduleLoader = new EnhancedModuleLoader(MODULE_CONFIG);
       window.ateexModuleLoader = moduleLoader;
 
       // Load all modules
@@ -555,15 +558,15 @@
       if (typeof window.initializeAteexApp === "function") {
         await window.initializeAteexApp();
       } else {
-        log(
+        context.log(
           "Main app initializer not found - modules may not have loaded correctly",
           "WARNING"
         );
       }
 
-      log("Ateex Auto Script initialized successfully!", "SUCCESS");
+      context.log("Ateex Auto Script initialized successfully!", "SUCCESS");
     } catch (error) {
-      log(`Initialization failed: ${error.message}`, "ERROR");
+      context.log(`Initialization failed: ${error.message}`, "ERROR");
 
       // Show error to user
       if (
