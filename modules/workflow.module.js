@@ -6,12 +6,30 @@
 (function (exports) {
   "use strict";
 
-  // Get dependencies
+  // Get dependencies with validation
   const core = AteexModules.core;
   const credentials = AteexModules.credentials;
   const data = AteexModules.data;
   const ui = AteexModules.ui;
   const recaptcha = AteexModules.recaptcha;
+
+  // Validate dependencies before destructuring
+  if (!core) {
+    throw new Error("Core module not loaded - missing dependency");
+  }
+  if (!credentials) {
+    throw new Error("Credentials module not loaded - missing dependency");
+  }
+  if (!data) {
+    throw new Error("Data module not loaded - missing dependency");
+  }
+  if (!ui) {
+    throw new Error("UI module not loaded - missing dependency");
+  }
+  if (!recaptcha) {
+    throw new Error("Recaptcha module not loaded - missing dependency");
+  }
+
   const { log, logInfo, logError, logSuccess, logWarning, qSelector, sleep } =
     core;
 

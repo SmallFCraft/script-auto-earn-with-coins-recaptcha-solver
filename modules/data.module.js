@@ -6,8 +6,13 @@
 (function (exports) {
   "use strict";
 
-  // Get dependencies
+  // Get dependencies with validation
   const core = AteexModules.core;
+  
+  // Validate dependencies before use
+  if (!core) {
+    throw new Error("Core module not loaded - missing dependency");
+  }
   const { log, logInfo, logError, logSuccess, logWarning, logDebug } = core;
 
   // ============= ENHANCED STATS SYSTEM =============
