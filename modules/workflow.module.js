@@ -302,8 +302,8 @@
 
           if (core.state.captchaSolved) {
             logSuccess("reCAPTCHA solved successfully, proceeding with login");
-            // Wait 2 seconds before submitting
-            await sleep(2000);
+            // Wait longer for reCAPTCHA state to propagate
+            await sleep(3000);
           } else {
             logWarning(
               "reCAPTCHA not solved within timeout period, attempting login anyway"
@@ -314,32 +314,169 @@
         }
       }
 
-      // STEP 6: Submit form and monitor result
-      const loginForm = qSelector('form[action*="login"]') || qSelector("form");
-      if (loginForm) {
-        logInfo("Submitting login form");
-        loginForm.submit();
-        // Start monitoring for login result
-        setTimeout(credentials.monitorLoginResult, 1000);
-      } else {
-        const signInButton =
-          qSelector('button[type="submit"]') ||
-          qSelector('input[type="submit"]') ||
-          qSelector('button[class*="login"]') ||
-          qSelector('button[id*="login"]');
-        if (signInButton) {
-          logInfo("Clicking sign in button");
-          signInButton.click();
-          // Start monitoring for login result
-          setTimeout(credentials.monitorLoginResult, 1000);
-        } else {
-          logError("No login form or submit button found");
-        }
-      }
+      // STEP 6: Enhanced form submission with retry logic
+      await attemptFormSubmission();
 
       logSuccess("Login process completed, monitoring result...");
     } catch (error) {
       logError("Error in handleLoginPage: " + error.message);
+    }
+  }
+
+  // Enhanced form submission function with retry mechanism
+  async function attemptFormSubmission() {
+    logInfo("🔐 Attempting form submission...");
+
+    let submitSuccess = false;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (!submitSuccess && attempts < maxAttempts) {
+      attempts++;
+      logInfo(`📝 Form submission attempt ${attempts}/${maxAttempts}`);
+
+      try {
+        // Method 1: Try form submission
+        const loginForm =
+          qSelector('form[action*="login"]') || qSelector("form");
+        if (loginForm) {
+          logInfo("Found login form, submitting...");
+
+          // Verify form has required fields filled
+          const emailField = loginForm.querySelector(
+            'input[name="email"], input[type="email"]'
+          );
+          const passwordField = loginForm.querySelector(
+            'input[name="password"], input[type="password"]'
+          );
+
+          if (
+            emailField &&
+            passwordField &&
+            emailField.value &&
+            passwordField.value
+          ) {
+            // Trigger form validation events
+            emailField.dispatchEvent(new Event("blur", { bubbles: true }));
+            passwordField.dispatchEvent(new Event("blur", { bubbles: true }));
+
+            await sleep(500); // Small delay for validation
+
+            loginForm.submit();
+            logSuccess("✅ Login form submitted successfully");
+            submitSuccess = true;
+
+            // Start monitoring for login result
+            setTimeout(credentials.monitorLoginResult, 1000);
+            break;
+          } else {
+            logWarning(
+              "⚠️ Form fields not properly filled, trying alternative method"
+            );
+          }
+        }
+
+        // Method 2: Try button click if form submission failed
+        if (!submitSuccess) {
+          const signInButtons = [
+            qSelector('button[type="submit"]'),
+            qSelector('input[type="submit"]'),
+            qSelector('button[class*="login"]'),
+            qSelector('button[id*="login"]'),
+            qSelector('button[class*="submit"]'),
+            qSelector('input[value*="Login"]'),
+            qSelector('input[value*="Sign"]'),
+            qSelector('button:contains("Login")'),
+            qSelector('button:contains("Sign")'),
+          ].filter(btn => btn !== null);
+
+          for (const button of signInButtons) {
+            if (button && !button.disabled) {
+              logInfo(
+                `🔘 Trying button: ${button.tagName} - ${
+                  button.type || "N/A"
+                } - ${button.textContent?.trim() || button.value || "No text"}`
+              );
+
+              // Ensure button is visible and clickable
+              if (button.offsetParent !== null) {
+                // Focus and click with events
+                button.focus();
+                await sleep(100);
+
+                button.dispatchEvent(new Event("mousedown", { bubbles: true }));
+                button.dispatchEvent(new Event("mouseup", { bubbles: true }));
+                button.click();
+
+                logSuccess("✅ Login button clicked successfully");
+                submitSuccess = true;
+
+                // Start monitoring for login result
+                setTimeout(credentials.monitorLoginResult, 1000);
+                break;
+              }
+            }
+          }
+        }
+
+        // Method 3: Try Enter key simulation if buttons failed
+        if (!submitSuccess && attempts >= 2) {
+          logInfo("🔑 Trying Enter key simulation as fallback");
+
+          const passwordField = qSelector('input[type="password"]');
+          if (passwordField) {
+            passwordField.focus();
+            await sleep(100);
+
+            // Simulate Enter key press
+            const enterEvent = new KeyboardEvent("keydown", {
+              key: "Enter",
+              code: "Enter",
+              keyCode: 13,
+              which: 13,
+              bubbles: true,
+            });
+
+            passwordField.dispatchEvent(enterEvent);
+
+            // Also try on document
+            document.dispatchEvent(enterEvent);
+
+            logInfo("🔑 Enter key simulation completed");
+            submitSuccess = true;
+
+            // Start monitoring for login result
+            setTimeout(credentials.monitorLoginResult, 1000);
+          }
+        }
+
+        if (!submitSuccess && attempts < maxAttempts) {
+          logWarning(
+            `⏳ Attempt ${attempts} failed, waiting 2s before retry...`
+          );
+          await sleep(2000);
+        }
+      } catch (error) {
+        logError(
+          `❌ Error in submission attempt ${attempts}: ${error.message}`
+        );
+        if (attempts < maxAttempts) {
+          await sleep(2000);
+        }
+      }
+    }
+
+    if (submitSuccess) {
+      logSuccess("✅ Form submission completed successfully");
+    } else {
+      logError("❌ All form submission attempts failed");
+
+      // Final fallback: reload page after 5 seconds
+      logWarning("🔄 Will reload page in 5 seconds as final fallback");
+      setTimeout(() => {
+        logInfo("🔄 Reloading page due to form submission failure");
+        window.location.reload();
+      }, 5000);
     }
   }
 

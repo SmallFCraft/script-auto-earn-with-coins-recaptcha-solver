@@ -108,9 +108,9 @@
 
       history.push(statsEntry);
 
-      // Keep only last 100 entries
-      if (history.length > 100) {
-        history = history.slice(-100);
+      // Keep only last 20 entries to reduce overhead
+      if (history.length > 20) {
+        history = history.slice(-20);
       }
 
       localStorage.setItem(STATS_HISTORY_KEY, JSON.stringify(history));
@@ -416,81 +416,6 @@
     }
   }
 
-  // ============= DATA EXPORT/IMPORT =============
-
-  // Export all data to JSON
-  function exportAllData() {
-    try {
-      const data = {
-        stats: {
-          totalCycles: core.state.totalCycles,
-          totalCoins: core.state.totalCoins,
-          startTime: core.state.startTime,
-          targetCoins: getTargetCoins(),
-        },
-        history: getStatsHistory(),
-        serverStats: getServerStats(),
-        exportDate: new Date().toISOString(),
-        version: "3.0",
-      };
-
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `ateex-data-${new Date().toISOString().split("T")[0]}.json`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-
-      logSuccess("📤 Data exported successfully");
-      return true;
-    } catch (e) {
-      logError("Export failed: " + e.message);
-      return false;
-    }
-  }
-
-  // Export stats history to CSV
-  function exportStatsHistoryCSV() {
-    try {
-      const history = getStatsHistory();
-      if (history.length === 0) {
-        logWarning("📊 No history data to export");
-        return false;
-      }
-
-      const csvHeader =
-        "Date,Time,Cycles,Coins,Target,Runtime(h),Rate(coins/h)\\n";
-      const csvData = history
-        .map(entry => {
-          const date = new Date(entry.timestamp);
-          const dateStr = date.toLocaleDateString();
-          const timeStr = date.toLocaleTimeString();
-          const runtimeHours = (entry.runtime / 3600000).toFixed(2);
-
-          return `"${dateStr}","${timeStr}",${entry.totalCycles},${entry.totalCoins},${entry.targetCoins},${runtimeHours},${entry.coinsPerHour}`;
-        })
-        .join("\\n");
-
-      const csvContent = csvHeader + csvData;
-      const blob = new Blob([csvContent], { type: "text/csv" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `ateex-stats-${new Date().toISOString().split("T")[0]}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-
-      logSuccess("Stats history exported to CSV");
-      return true;
-    } catch (e) {
-      logError("Error exporting history: " + e.message);
-      return false;
-    }
-  }
-
   // ============= DATA SYNCHRONIZATION =============
 
   // Sync all data systems to ensure consistency
@@ -548,7 +473,5 @@
   exports.updateServerStats = updateServerStats;
   exports.resetServerFailures = resetServerFailures;
   exports.clearBrowserData = clearBrowserData;
-  exports.exportAllData = exportAllData;
-  exports.exportStatsHistoryCSV = exportStatsHistoryCSV;
   exports.syncAllData = syncAllData;
 })(exports);

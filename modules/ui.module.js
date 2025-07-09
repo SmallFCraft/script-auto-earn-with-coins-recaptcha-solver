@@ -13,12 +13,12 @@
 
   // ============= UI CONSTANTS =============
 
-  // Settings menu configuration
+  // Settings menu configuration - simplified
   const SETTINGS_MENU = {
-    "view-history": {
+    "view-stats": {
       icon: "📊",
-      label: "View History",
-      description: "View stats history and analytics",
+      label: "View Stats",
+      description: "View current statistics",
     },
     "reset-stats": {
       icon: "🔄",
@@ -30,17 +30,6 @@
       icon: "🔐",
       label: "Clear Credentials",
       description: "Clear saved login credentials",
-      danger: true,
-    },
-    "export-data": {
-      icon: "📤",
-      label: "Export Data",
-      description: "Export all data to JSON file",
-    },
-    "clear-all": {
-      icon: "🗑️",
-      label: "Clear All Data",
-      description: "Reset everything to initial state",
       danger: true,
     },
   };
@@ -328,218 +317,45 @@
     });
   }
 
-  // ============= STATS HISTORY POPUP =============
+  // ============= SIMPLE STATS VIEW =============
 
-  function showStatsHistoryPopup() {
-    const history = data.getStatsHistory();
-
-    const modal = document.createElement("div");
-    modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            z-index: 99999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        `;
-
-    let historyHtml = "";
-    if (history.length === 0) {
-      historyHtml =
-        "<div style='text-align: center; opacity: 0.7;'>No history data available yet.</div>";
-    } else {
-      // Show last 10 entries
-      const recentHistory = history.slice(-10).reverse();
-      historyHtml = recentHistory
-        .map(entry => {
-          const date = new Date(entry.timestamp);
-          const timeStr = date.toLocaleTimeString();
-          const dateStr = date.toLocaleDateString();
-          const runtimeHours = Math.floor(entry.runtime / 3600000);
-          const runtimeMinutes = Math.floor((entry.runtime % 3600000) / 60000);
-
-          return `
-                        <div style="
-                            margin-bottom: 10px;
-                            padding: 8px;
-                            background: rgba(255,255,255,0.1);
-                            border-radius: 5px;
-                            font-size: 11px;
-                        ">
-                            <div style="font-weight: bold;">${dateStr} ${timeStr}</div>
-                            <div>Cycles: ${entry.totalCycles} | Coins: ${entry.totalCoins}/${entry.targetCoins}</div>
-                            <div>Runtime: ${runtimeHours}h ${runtimeMinutes}m | Rate: ${entry.coinsPerHour}/h</div>
-                        </div>
-                    `;
-        })
-        .join("");
-    }
-
-    modal.innerHTML = `
-            <div style="
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 30px;
-                border-radius: 15px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                color: white;
-                max-width: 500px;
-                width: 90%;
-                max-height: 80vh;
-                overflow-y: auto;
-            ">
-                <h2 style="margin: 0 0 20px 0; text-align: center;">📊 Stats History</h2>
-
-                <div style="margin-bottom: 15px; display: flex; gap: 10px; justify-content: center;">
-                    <button id="show-all-history" style="
-                        padding: 8px 16px;
-                        border: none;
-                        border-radius: 5px;
-                        background: rgba(255,255,255,0.2);
-                        color: white;
-                        cursor: pointer;
-                        font-size: 12px;
-                    ">Show All (${history.length})</button>
-                    <button id="clear-history" style="
-                        padding: 8px 16px;
-                        border: none;
-                        border-radius: 5px;
-                        background: rgba(255,0,0,0.3);
-                        color: white;
-                        cursor: pointer;
-                        font-size: 12px;
-                    ">Clear History</button>
-                    <button id="export-history" style="
-                        padding: 8px 16px;
-                        border: none;
-                        border-radius: 5px;
-                        background: rgba(0,255,0,0.3);
-                        color: white;
-                        cursor: pointer;
-                        font-size: 12px;
-                    ">Export CSV</button>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    ${historyHtml}
-                </div>
-
-                <div style="text-align: center;">
-                    <button id="history-close" style="
-                        padding: 12px 24px;
-                        border: none;
-                        border-radius: 5px;
-                        background: rgba(255,255,255,0.9);
-                        color: #333;
-                        cursor: pointer;
-                        font-size: 14px;
-                        font-weight: bold;
-                    ">Close</button>
-                </div>
-            </div>
-        `;
-
-    document.body.appendChild(modal);
-
-    const closeButton = document.getElementById("history-close");
-    const showAllButton = document.getElementById("show-all-history");
-    const clearHistoryButton = document.getElementById("clear-history");
-    const exportButton = document.getElementById("export-history");
-
-    let showingAll = false;
-
-    closeButton.onclick = () => {
-      document.body.removeChild(modal);
+  function showSimpleStats() {
+    const currentStats = {
+      cycles: core.state.totalCycles,
+      coins: core.state.totalCoins,
+      target: data.getTargetCoins(),
+      runtime: core.state.autoStatsEnabled
+        ? Date.now() - (core.state.autoStatsStartTime || core.state.startTime)
+        : 0,
     };
 
-    // Show all history entries
-    showAllButton.onclick = () => {
-      showingAll = !showingAll;
-      const historyContainer = modal.querySelector(
-        'div[style*="margin-bottom: 20px;"]:last-of-type'
-      );
+    const hours = Math.floor(currentStats.runtime / 3600000);
+    const minutes = Math.floor((currentStats.runtime % 3600000) / 60000);
+    const coinsPerHour =
+      currentStats.runtime > 0
+        ? Math.round((currentStats.coins * 3600000) / currentStats.runtime)
+        : 0;
 
-      if (showingAll) {
-        // Show all entries
-        const allHistoryHtml =
-          history.length === 0
-            ? "<div style='text-align: center; opacity: 0.7;'>No history data available yet.</div>"
-            : history
-                .slice()
-                .reverse()
-                .map(entry => {
-                  const date = new Date(entry.timestamp);
-                  const timeStr = date.toLocaleTimeString();
-                  const dateStr = date.toLocaleDateString();
-                  const runtimeHours = Math.floor(entry.runtime / 3600000);
-                  const runtimeMinutes = Math.floor(
-                    (entry.runtime % 3600000) / 60000
-                  );
-
-                  return `
-                                    <div style="
-                                        margin-bottom: 10px;
-                                        padding: 8px;
-                                        background: rgba(255,255,255,0.1);
-                                        border-radius: 5px;
-                                        font-size: 11px;
-                                    ">
-                                        <div style="font-weight: bold;">${dateStr} ${timeStr}</div>
-                                        <div>Cycles: ${entry.totalCycles} | Coins: ${entry.totalCoins}/${entry.targetCoins}</div>
-                                        <div>Runtime: ${runtimeHours}h ${runtimeMinutes}m | Rate: ${entry.coinsPerHour}/h</div>
-                                    </div>
-                                `;
-                })
-                .join("");
-
-        historyContainer.innerHTML = allHistoryHtml;
-        showAllButton.textContent = "Show Recent";
-      } else {
-        // Show recent only
-        historyContainer.innerHTML = historyHtml;
-        showAllButton.textContent = `Show All (${history.length})`;
-      }
-    };
-
-    // Clear history
-    clearHistoryButton.onclick = () => {
-      if (
-        confirm(
-          "Are you sure you want to clear all stats history? This cannot be undone."
-        )
-      ) {
-        try {
-          localStorage.removeItem("ateex_stats_history");
-          logSuccess("📊 Stats history cleared successfully!");
-          document.body.removeChild(modal);
-        } catch (e) {
-          logError("Error clearing history: " + e.message);
-        }
-      }
-    };
-
-    // Export to CSV
-    exportButton.onclick = () => {
-      data.exportStatsHistoryCSV();
-    };
-
-    // Close on escape key
-    modal.addEventListener("keydown", e => {
-      if (e.key === "Escape") {
-        closeButton.click();
-      }
-    });
-
-    // Close on background click
-    modal.onclick = e => {
-      if (e.target === modal) {
-        closeButton.click();
-      }
-    };
+    showModal(
+      "📊 Current Stats",
+      `
+        <div style="text-align: center; font-size: 14px;">
+          <div style="margin-bottom: 10px;">
+            <span style="color: #4CAF50;">Cycles:</span> ${currentStats.cycles}
+          </div>
+          <div style="margin-bottom: 10px;">
+            <span style="color: #FFD700;">Coins:</span> ${currentStats.coins} / ${currentStats.target}
+          </div>
+          <div style="margin-bottom: 10px;">
+            <span style="color: #2196F3;">Runtime:</span> ${hours}h ${minutes}m
+          </div>
+          <div style="margin-bottom: 10px;">
+            <span style="color: #FF9800;">Rate:</span> ${coinsPerHour} coins/hour
+          </div>
+        </div>
+      `,
+      [{ label: "Close", callback: null }]
+    );
   }
 
   // ============= SETTINGS MANAGER =============
@@ -550,8 +366,8 @@
       if (!setting) return;
 
       switch (action) {
-        case "view-history":
-          this.showHistory();
+        case "view-stats":
+          this.showStats();
           break;
         case "reset-stats":
           this.resetStats();
@@ -559,17 +375,11 @@
         case "clear-creds":
           this.clearCredentials();
           break;
-        case "export-data":
-          this.exportData();
-          break;
-        case "clear-all":
-          this.clearAllData();
-          break;
       }
     },
 
-    showHistory: function () {
-      showStatsHistoryPopup();
+    showStats: function () {
+      showSimpleStats();
     },
 
     resetStats: function () {
@@ -617,15 +427,15 @@
       showModal(
         "🔐 Clear Credentials",
         `
-                    <div style="text-align: center;">
-                        <div style="font-size: 14px; margin-bottom: 10px;">
-                            Clear saved login credentials?
-                        </div>
-                        <div style="font-size: 12px; opacity: 0.7;">
-                            You will need to enter username and password again.
-                        </div>
-                    </div>
-                `,
+          <div style="text-align: center;">
+            <div style="font-size: 14px; margin-bottom: 10px;">
+              Clear saved login credentials?
+            </div>
+            <div style="font-size: 12px; opacity: 0.7;">
+              You will need to enter username and password again.
+            </div>
+          </div>
+        `,
         [
           { label: "Cancel", callback: null },
           {
@@ -636,80 +446,6 @@
                 AteexModules.credentials.clearCredentials();
                 logSuccess("🔐 Credentials cleared");
               }
-            },
-          },
-        ]
-      );
-    },
-
-    exportData: function () {
-      data.exportAllData();
-    },
-
-    clearAllData: function () {
-      showModal(
-        "🗑️ Clear All Data",
-        `
-                    <div style="text-align: center;">
-                        <div style="font-size: 14px; margin-bottom: 10px; color: #ff6b6b;">
-                            ⚠️ WARNING: This will delete EVERYTHING!
-                        </div>
-                        <div style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
-                            • All statistics and history<br>
-                            • Saved credentials<br>
-                            • Target settings<br>
-                            • Server data
-                        </div>
-                        <div style="font-size: 12px; opacity: 0.7; color: #ffd700;">
-                            This action cannot be undone!
-                        </div>
-                    </div>
-                `,
-        [
-          { label: "Cancel", callback: null },
-          {
-            label: "DELETE EVERYTHING",
-            danger: true,
-            callback: () => {
-              // Clear all localStorage data
-              Object.keys(localStorage).forEach(key => {
-                if (key.startsWith("ateex_")) {
-                  localStorage.removeItem(key);
-                }
-              });
-
-              // Reset ALL global state variables to initial values
-              core.state.totalCycles = 0;
-              core.state.totalCoins = 0;
-              core.state.startTime = Date.now();
-              core.state.lastCycleTime = 0;
-              core.state.credentialsReady = false;
-              core.state.autoStatsEnabled = false;
-              core.state.setupCompleted = false;
-              core.state.autoStatsStartTime = null;
-              core.state.captchaSolved = false;
-              core.state.captchaInProgress = false;
-              core.state.lastSolvedTime = 0;
-              core.state.lastAutomatedQueriesTime = 0;
-
-              // Hide counter UI
-              const counter = document.getElementById("ateex-counter");
-              if (counter) {
-                counter.remove();
-              }
-
-              // Reset counter creation flag
-              window.ateexCounterCreated = false;
-
-              // Update any remaining UI
-              updateCounter();
-
-              logSuccess("🗑️ All data cleared - complete fresh start!");
-
-              // Logout and reload
-              setTimeout(() => {
-                logout();
-              }, 2000);
             },
           },
         ]

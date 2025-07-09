@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ateex Cloud Auto Script - Modular
 // @namespace    http://tampermonkey.net/
-// @version      3.0
+// @version      3.1.2
 // @description  Modular auto script for Ateex Cloud with dynamic module loading
 // @author       phmyhu_1710
 // @match        https://dash.ateex.cloud/*
@@ -27,11 +27,14 @@
   window.ateexModularRunning = true;
 
   // ============= MODULE LOADER CONFIGURATION =============
-  const GITHUB_BASE_URL =
-    "https://raw.githubusercontent.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules/";
-  const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+  const SOURCE_URLS = [
+    "https://raw.githubusercontent.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules/",
+    "https://cdn.jsdelivr.net/gh/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver@main/modules/",
+    "https://gitcdn.xyz/repo/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules/",
+  ];
+  const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days (extended)
   const CACHE_PREFIX = "ateex_module_";
-  const VERSION = "3.1.1";
+  const VERSION = "3.1.2";
 
   // Module definitions with dependencies
   const MODULES = {
@@ -63,11 +66,6 @@
     workflow: {
       url: "workflow.module.js",
       dependencies: ["core", "credentials", "data", "ui"],
-      required: true,
-    },
-    error: {
-      url: "error.module.js",
-      dependencies: ["core"],
       required: true,
     },
   };
@@ -125,21 +123,60 @@
       }
     }
 
-    // Fetch module from GitHub
+    // Fetch module with fallback sources
     async fetchModule(moduleName) {
       const moduleConfig = MODULES[moduleName];
       if (!moduleConfig) {
         throw new Error(`Unknown module: ${moduleName}`);
       }
 
-      const url = GITHUB_BASE_URL + moduleConfig.url;
-      console.log(`[Module Loader] Fetching module from: ${url}`);
+      let lastError = null;
 
+      // Try each source URL until one succeeds
+      for (let i = 0; i < SOURCE_URLS.length; i++) {
+        const baseUrl = SOURCE_URLS[i];
+        const url = baseUrl + moduleConfig.url;
+
+        console.log(
+          `[Module Loader] Attempting source ${i + 1}/${
+            SOURCE_URLS.length
+          }: ${url}`
+        );
+
+        try {
+          const code = await this._fetchFromUrl(url);
+          console.log(
+            `[Module Loader] Successfully fetched from source ${i + 1}`
+          );
+          return code;
+        } catch (error) {
+          lastError = error;
+          console.warn(
+            `[Module Loader] Source ${i + 1} failed:`,
+            error.message
+          );
+
+          // If not the last source, continue to next
+          if (i < SOURCE_URLS.length - 1) {
+            console.log(`[Module Loader] Trying next source...`);
+            continue;
+          }
+        }
+      }
+
+      // All sources failed
+      throw new Error(
+        `Failed to fetch module ${moduleName} from all sources. Last error: ${lastError?.message}`
+      );
+    }
+
+    // Helper method to fetch from a single URL
+    async _fetchFromUrl(url) {
       return new Promise((resolve, reject) => {
         GM_xmlhttpRequest({
           method: "GET",
           url: url,
-          timeout: 30000,
+          timeout: 15000, // Reduced timeout for faster fallback
           onload: response => {
             if (response.status === 200) {
               resolve(response.responseText);

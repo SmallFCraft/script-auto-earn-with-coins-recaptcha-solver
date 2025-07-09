@@ -431,11 +431,83 @@
     }
   }
 
+  // ============= BASIC ERROR HANDLING =============
+
+  // Simple error page detection
+  function detectErrorPage() {
+    try {
+      const pageText = document.body?.textContent?.toLowerCase() || "";
+      const pageTitle = document.title.toLowerCase();
+
+      // Basic error patterns
+      const errorPatterns = [
+        /502\s*bad\s*gateway/i,
+        /500\s*internal\s*server\s*error/i,
+        /503\s*service\s*unavailable/i,
+        /504\s*gateway\s*timeout/i,
+        /419\s*page\s*expired/i,
+        /403\s*forbidden/i,
+        /404\s*not\s*found/i,
+        /server\s*error/i,
+        /something.*went.*wrong/i,
+        /maintenance\s*mode/i,
+        /session\s*expired/i,
+      ];
+
+      return errorPatterns.some(
+        pattern => pattern.test(pageText) || pattern.test(pageTitle)
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Handle error page with simple redirect
+  function handleErrorPage() {
+    if (window.top !== window.self) return; // Skip in iframes
+
+    const currentUrl = window.location.href;
+    const baseUrl = "https://dash.ateex.cloud/";
+
+    if (currentUrl === baseUrl) return; // Already at base
+
+    logWarning(`Error page detected: ${currentUrl}`);
+
+    // Stop script activities
+    window.scriptStopped = true;
+
+    // Redirect after 3 seconds
+    setTimeout(() => {
+      logInfo("Redirecting to base URL from error page");
+      window.location.href = baseUrl;
+    }, 3000);
+  }
+
+  // Basic error detection check
+  function initBasicErrorDetection() {
+    // Check on load
+    setTimeout(() => {
+      if (detectErrorPage()) {
+        handleErrorPage();
+      }
+    }, 2000);
+
+    // Check periodically
+    setInterval(() => {
+      if (!window.scriptStopped && detectErrorPage()) {
+        handleErrorPage();
+      }
+    }, 30000); // Every 30 seconds
+  }
+
   // ============= MODULE INITIALIZATION =============
 
   async function initialize() {
     // Check auto stats state
     checkAutoStatsState();
+
+    // Initialize basic error detection
+    initBasicErrorDetection();
 
     // Setup message listeners
     if (window.top === window.self) {
@@ -486,6 +558,11 @@
 
   // Browser data management
   exports.clearGoogleCookies = clearGoogleCookies;
+
+  // Error handling
+  exports.detectErrorPage = detectErrorPage;
+  exports.handleErrorPage = handleErrorPage;
+  exports.initBasicErrorDetection = initBasicErrorDetection;
 
   // Module initialization
   exports.initialize = initialize;
