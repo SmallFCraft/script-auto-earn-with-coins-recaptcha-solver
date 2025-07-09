@@ -1,12 +1,22 @@
 /**
  * Credentials Management Module
- * Part of Ateex Auto v3.0 Modular Edition
+ * Part of Ateex Auto v3.0.0 Modular Edition
  * Handles secure credential storage, encryption, and authentication
  */
 
 // Load utils module
 const utils = ateexGlobalState.modulesLoaded.utils;
-const { logInfo, logError, logSuccess, logWarning, logDebug, safeJsonParse, safeJsonStringify, createElement, sleep } = utils;
+const {
+  logInfo,
+  logError,
+  logSuccess,
+  logWarning,
+  logDebug,
+  safeJsonParse,
+  safeJsonStringify,
+  createElement,
+  sleep,
+} = utils;
 
 // ============= ENCRYPTION UTILITIES =============
 
@@ -18,12 +28,12 @@ function encryptCredentials(data, key = "ateex_secure_key_2024") {
   try {
     const jsonStr = safeJsonStringify(data);
     let encrypted = "";
-    
+
     for (let i = 0; i < jsonStr.length; i++) {
       const charCode = jsonStr.charCodeAt(i) ^ key.charCodeAt(i % key.length);
       encrypted += String.fromCharCode(charCode);
     }
-    
+
     return btoa(encrypted);
   } catch (error) {
     logError(`Encryption error: ${error.message}`);
@@ -38,12 +48,12 @@ function decryptCredentials(encryptedData, key = "ateex_secure_key_2024") {
   try {
     const encrypted = atob(encryptedData);
     let decrypted = "";
-    
+
     for (let i = 0; i < encrypted.length; i++) {
       const charCode = encrypted.charCodeAt(i) ^ key.charCodeAt(i % key.length);
       decrypted += String.fromCharCode(charCode);
     }
-    
+
     return safeJsonParse(decrypted);
   } catch (error) {
     logError(`Decryption error: ${error.message}`);
@@ -62,16 +72,16 @@ function saveCredentials(email, password) {
       email: email.trim(),
       password: password,
       timestamp: Date.now(),
-      version: ateexGlobalState.version
+      version: ateexGlobalState.version,
     };
-    
+
     const encrypted = encryptCredentials(credentials);
     if (encrypted) {
       localStorage.setItem("ateex_secure_creds", encrypted);
       logSuccess("Credentials saved securely");
       return true;
     }
-    
+
     return false;
   } catch (error) {
     logError(`Error saving credentials: ${error.message}`);
@@ -88,13 +98,13 @@ function loadCredentials() {
     if (!encrypted) {
       return null;
     }
-    
+
     const credentials = decryptCredentials(encrypted);
     if (credentials && credentials.email && credentials.password) {
       logDebug("Credentials loaded successfully");
       return credentials;
     }
-    
+
     logWarning("Invalid credentials found, clearing...");
     clearCredentials();
     return null;
@@ -125,17 +135,20 @@ function validateCredentials(email, password) {
   if (!email || !password) {
     return { valid: false, message: "Email and password are required" };
   }
-  
+
   email = email.trim();
-  
+
   if (email.length < 3) {
-    return { valid: false, message: "Email/username must be at least 3 characters" };
+    return {
+      valid: false,
+      message: "Email/username must be at least 3 characters",
+    };
   }
-  
+
   if (password.length < 6) {
     return { valid: false, message: "Password must be at least 6 characters" };
   }
-  
+
   // Check if it's email format or username
   const isEmail = email.includes("@");
   if (isEmail) {
@@ -144,7 +157,7 @@ function validateCredentials(email, password) {
       return { valid: false, message: "Invalid email format" };
     }
   }
-  
+
   return { valid: true, message: "Credentials are valid" };
 }
 
@@ -161,7 +174,7 @@ function createCredentialForm() {
       resolve(null);
       return;
     }
-    
+
     // Create overlay
     const overlay = createElement("div", {
       id: "ateex-credential-overlay",
@@ -175,10 +188,10 @@ function createCredentialForm() {
         zIndex: "999999",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center"
-      }
+        justifyContent: "center",
+      },
     });
-    
+
     // Create form container
     const formContainer = createElement("div", {
       id: "ateex-credential-form",
@@ -189,10 +202,10 @@ function createCredentialForm() {
         boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
         maxWidth: "400px",
         width: "90%",
-        fontFamily: "Arial, sans-serif"
-      }
+        fontFamily: "Arial, sans-serif",
+      },
     });
-    
+
     // Form HTML
     formContainer.innerHTML = `
       <div style="text-align: center; margin-bottom: 20px;">
@@ -230,23 +243,23 @@ function createCredentialForm() {
       
       <div id="ateex-form-message" style="margin-top: 15px; padding: 10px; border-radius: 5px; display: none;"></div>
     `;
-    
+
     overlay.appendChild(formContainer);
     document.body.appendChild(overlay);
-    
+
     // Focus on email field
     setTimeout(() => {
       const emailField = document.getElementById("ateex-email");
       if (emailField) emailField.focus();
     }, 100);
-    
+
     // Show message function
     function showMessage(message, type = "info") {
       const messageDiv = document.getElementById("ateex-form-message");
       if (messageDiv) {
         messageDiv.style.display = "block";
         messageDiv.textContent = message;
-        
+
         switch (type) {
           case "error":
             messageDiv.style.backgroundColor = "#ffebee";
@@ -265,57 +278,61 @@ function createCredentialForm() {
         }
       }
     }
-    
+
     // Handle save button
-    document.getElementById("ateex-save-btn").addEventListener("click", async () => {
-      const email = document.getElementById("ateex-email").value.trim();
-      const password = document.getElementById("ateex-password").value;
-      const remember = document.getElementById("ateex-remember").checked;
-      
-      const validation = validateCredentials(email, password);
-      if (!validation.valid) {
-        showMessage(validation.message, "error");
-        return;
-      }
-      
-      if (remember) {
-        const saved = saveCredentials(email, password);
-        if (!saved) {
-          showMessage("Failed to save credentials", "error");
+    document
+      .getElementById("ateex-save-btn")
+      .addEventListener("click", async () => {
+        const email = document.getElementById("ateex-email").value.trim();
+        const password = document.getElementById("ateex-password").value;
+        const remember = document.getElementById("ateex-remember").checked;
+
+        const validation = validateCredentials(email, password);
+        if (!validation.valid) {
+          showMessage(validation.message, "error");
           return;
         }
-      }
-      
-      showMessage("Credentials saved! Auto Stats starting...", "success");
-      
-      // Enable auto stats
-      ateexGlobalState.autoStatsEnabled = true;
-      ateexGlobalState.setupCompleted = true;
-      ateexGlobalState.credentialsReady = true;
-      ateexGlobalState.autoStatsStartTime = Date.now();
-      
-      // Save auto stats state
-      localStorage.setItem("ateex_auto_stats_enabled", "true");
-      
-      setTimeout(() => {
-        overlay.remove();
-        resolve({ email, password });
-      }, 1500);
-    });
-    
+
+        if (remember) {
+          const saved = saveCredentials(email, password);
+          if (!saved) {
+            showMessage("Failed to save credentials", "error");
+            return;
+          }
+        }
+
+        showMessage("Credentials saved! Auto Stats starting...", "success");
+
+        // Enable auto stats
+        ateexGlobalState.autoStatsEnabled = true;
+        ateexGlobalState.setupCompleted = true;
+        ateexGlobalState.credentialsReady = true;
+        ateexGlobalState.autoStatsStartTime = Date.now();
+
+        // Save auto stats state
+        localStorage.setItem("ateex_auto_stats_enabled", "true");
+
+        setTimeout(() => {
+          overlay.remove();
+          resolve({ email, password });
+        }, 1500);
+      });
+
     // Handle cancel button
-    document.getElementById("ateex-cancel-btn").addEventListener("click", () => {
-      overlay.remove();
-      resolve(null);
-    });
-    
+    document
+      .getElementById("ateex-cancel-btn")
+      .addEventListener("click", () => {
+        overlay.remove();
+        resolve(null);
+      });
+
     // Handle Enter key
-    formContainer.addEventListener("keypress", (e) => {
+    formContainer.addEventListener("keypress", e => {
       if (e.key === "Enter") {
         document.getElementById("ateex-save-btn").click();
       }
     });
-    
+
     // Handle Escape key
     document.addEventListener("keydown", function escapeHandler(e) {
       if (e.key === "Escape") {
@@ -337,7 +354,7 @@ async function getCredentials() {
     logInfo("Using existing credentials");
     return existing;
   }
-  
+
   // Prompt user for new credentials
   logInfo("Prompting user for credentials");
   return await createCredentialForm();
@@ -350,20 +367,20 @@ function checkAutoStatsState() {
   try {
     const enabled = localStorage.getItem("ateex_auto_stats_enabled");
     const hasCredentials = !!loadCredentials();
-    
+
     if (enabled === "true" && hasCredentials) {
       ateexGlobalState.autoStatsEnabled = true;
       ateexGlobalState.setupCompleted = true;
       ateexGlobalState.credentialsReady = true;
-      
+
       if (!ateexGlobalState.autoStatsStartTime) {
         ateexGlobalState.autoStatsStartTime = Date.now();
       }
-      
+
       logInfo("Auto stats state restored from storage");
       return true;
     }
-    
+
     return false;
   } catch (error) {
     logError(`Error checking auto stats state: ${error.message}`);
@@ -380,14 +397,14 @@ module.exports = {
   clearCredentials,
   validateCredentials,
   getCredentials,
-  
+
   // UI functions
   createCredentialForm,
-  
+
   // State management
   checkAutoStatsState,
-  
+
   // Encryption (for advanced use)
   encryptCredentials,
-  decryptCredentials
+  decryptCredentials,
 };

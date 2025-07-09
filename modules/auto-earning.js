@@ -510,7 +510,7 @@ async function initialize() {
         ateexGlobalState.credentialsReady = true;
         logInfo("Existing credentials found and loaded");
 
-        // Notify iframes that credentials are ready
+        // Notify iframes that credentials are ready (immediate)
         const message = {
           type: "ateex_credentials_ready",
           timestamp: Date.now(),
@@ -524,6 +524,40 @@ async function initialize() {
             // Ignore cross-origin errors
           }
         });
+
+        // Setup periodic notification for new iframes (from original script)
+        setTimeout(() => {
+          let lastIframeCount = 0;
+          setInterval(() => {
+            if (ateexGlobalState.credentialsReady) {
+              const currentFrames = qSelectorAll("iframe");
+              // Only send if new iframes appeared
+              if (currentFrames.length > lastIframeCount) {
+                try {
+                  const periodicMessage = {
+                    type: "ateex_credentials_ready",
+                    timestamp: Date.now(),
+                  };
+
+                  currentFrames.forEach(frame => {
+                    try {
+                      frame.contentWindow.postMessage(periodicMessage, "*");
+                    } catch (e) {
+                      // Ignore cross-origin errors
+                    }
+                  });
+
+                  logDebug(
+                    `Sent credentials ready to ${currentFrames.length} iframes`
+                  );
+                } catch (e) {
+                  // Ignore errors
+                }
+              }
+              lastIframeCount = currentFrames.length;
+            }
+          }, 5000); // Check every 5 seconds
+        }, 1000); // Wait 1 second for iframes to load
       }
 
       // Load saved stats and create UI
@@ -548,7 +582,7 @@ async function initialize() {
               ateexGlobalState.credentialsReady = true;
               logSuccess("✅ Credentials obtained - Auto Stats enabled");
 
-              // Notify iframes
+              // Notify iframes immediately
               const message = {
                 type: "ateex_credentials_ready",
                 timestamp: Date.now(),
@@ -562,6 +596,43 @@ async function initialize() {
                   // Ignore cross-origin errors
                 }
               });
+
+              // Setup periodic notification for new iframes (same as existing credentials)
+              setTimeout(() => {
+                let lastIframeCount = 0;
+                setInterval(() => {
+                  if (ateexGlobalState.credentialsReady) {
+                    const currentFrames = qSelectorAll("iframe");
+                    // Only send if new iframes appeared
+                    if (currentFrames.length > lastIframeCount) {
+                      try {
+                        const periodicMessage = {
+                          type: "ateex_credentials_ready",
+                          timestamp: Date.now(),
+                        };
+
+                        currentFrames.forEach(frame => {
+                          try {
+                            frame.contentWindow.postMessage(
+                              periodicMessage,
+                              "*"
+                            );
+                          } catch (e) {
+                            // Ignore cross-origin errors
+                          }
+                        });
+
+                        logDebug(
+                          `Sent credentials ready to ${currentFrames.length} iframes`
+                        );
+                      } catch (e) {
+                        // Ignore errors
+                      }
+                    }
+                    lastIframeCount = currentFrames.length;
+                  }
+                }, 5000); // Check every 5 seconds
+              }, 1000); // Wait 1 second for iframes to load
 
               // Create UI now that setup is complete
               ui.createCounterUI();

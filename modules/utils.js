@@ -1,6 +1,6 @@
 /**
  * Utils Module - Core utilities and logging system
- * Part of Ateex Auto v3.0 Modular Edition
+ * Part of Ateex Auto v3.0.0 Modular Edition
  */
 
 // ============= LOGGING SYSTEM =============
@@ -13,18 +13,23 @@ const logSpamTracker = new Map();
 /**
  * Enhanced logging with spam control
  */
-function logWithSpamControl(message, level = "INFO", spamKey = null, cooldown = 30000) {
+function logWithSpamControl(
+  message,
+  level = "INFO",
+  spamKey = null,
+  cooldown = 30000
+) {
   if (spamKey) {
     const now = Date.now();
     const lastLog = logSpamTracker.get(spamKey);
-    
-    if (lastLog && (now - lastLog) < cooldown) {
+
+    if (lastLog && now - lastLog < cooldown) {
       return; // Skip spam message
     }
-    
+
     logSpamTracker.set(spamKey, now);
   }
-  
+
   log(message, level);
 }
 
@@ -105,7 +110,7 @@ function waitForElement(selector, timeout = 10000) {
 
     observer.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
 
     setTimeout(() => {
@@ -134,9 +139,13 @@ async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
       if (i === maxRetries - 1) {
         throw error;
       }
-      
+
       const delay = baseDelay * Math.pow(2, i);
-      logWarning(`Retry ${i + 1}/${maxRetries} failed, waiting ${delay}ms: ${error.message}`);
+      logWarning(
+        `Retry ${i + 1}/${maxRetries} failed, waiting ${delay}ms: ${
+          error.message
+        }`
+      );
       await sleep(delay);
     }
   }
@@ -170,8 +179,9 @@ function safeJsonStringify(obj, defaultValue = "{}") {
  * Generate random string
  */
 function generateRandomString(length = 8) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
   for (let i = 0; i < length; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -185,7 +195,7 @@ function formatDuration(ms) {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
-  
+
   if (hours > 0) {
     return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
   } else if (minutes > 0) {
@@ -218,11 +228,11 @@ function calculateETA(current, target, rate) {
   if (rate <= 0 || current >= target) {
     return "N/A";
   }
-  
+
   const remaining = target - current;
   const hoursRemaining = remaining / rate;
   const msRemaining = hoursRemaining * 60 * 60 * 1000;
-  
+
   return formatDuration(msRemaining);
 }
 
@@ -232,15 +242,15 @@ function calculateETA(current, target, rate) {
 function isPageMatch(pattern) {
   const currentPath = window.location.pathname;
   const currentUrl = window.location.href;
-  
-  if (typeof pattern === 'string') {
+
+  if (typeof pattern === "string") {
     return currentPath.includes(pattern) || currentUrl.includes(pattern);
   }
-  
+
   if (pattern instanceof RegExp) {
     return pattern.test(currentPath) || pattern.test(currentUrl);
   }
-  
+
   return false;
 }
 
@@ -249,20 +259,20 @@ function isPageMatch(pattern) {
  */
 function detectErrorPage() {
   const title = document.title.toLowerCase();
-  const body = document.body ? document.body.innerText.toLowerCase() : '';
-  
+  const body = document.body ? document.body.innerText.toLowerCase() : "";
+
   const errorIndicators = [
-    '502 bad gateway',
-    '500 internal server error',
-    '419 page expired',
-    'error',
-    'something went wrong',
-    'page not found',
-    'access denied'
+    "502 bad gateway",
+    "500 internal server error",
+    "419 page expired",
+    "error",
+    "something went wrong",
+    "page not found",
+    "access denied",
   ];
-  
-  return errorIndicators.some(indicator => 
-    title.includes(indicator) || body.includes(indicator)
+
+  return errorIndicators.some(
+    indicator => title.includes(indicator) || body.includes(indicator)
   );
 }
 
@@ -273,10 +283,10 @@ async function clearBrowserData() {
   try {
     // Clear localStorage
     localStorage.clear();
-    
+
     // Clear sessionStorage
     sessionStorage.clear();
-    
+
     logInfo("Browser data cleared successfully");
   } catch (error) {
     logError(`Error clearing browser data: ${error.message}`);
@@ -289,12 +299,12 @@ async function clearBrowserData() {
 async function clearGoogleCookies(reload = false) {
   try {
     // Clear Google-related cookies
-    const googleDomains = ['.google.com', '.recaptcha.net', '.gstatic.com'];
-    
+    const googleDomains = [".google.com", ".recaptcha.net", ".gstatic.com"];
+
     // Note: In Tampermonkey, we can't directly clear cookies
     // This is a placeholder for the functionality
     logInfo("Google cookies clearing requested");
-    
+
     if (reload) {
       setTimeout(() => {
         window.location.reload();
@@ -308,21 +318,21 @@ async function clearGoogleCookies(reload = false) {
 /**
  * Create DOM element with attributes
  */
-function createElement(tag, attributes = {}, textContent = '') {
+function createElement(tag, attributes = {}, textContent = "") {
   const element = document.createElement(tag);
-  
+
   Object.entries(attributes).forEach(([key, value]) => {
-    if (key === 'style' && typeof value === 'object') {
+    if (key === "style" && typeof value === "object") {
       Object.assign(element.style, value);
     } else {
       element.setAttribute(key, value);
     }
   });
-  
+
   if (textContent) {
     element.textContent = textContent;
   }
-  
+
   return element;
 }
 
@@ -330,7 +340,7 @@ function createElement(tag, attributes = {}, textContent = '') {
  * Add CSS styles to page
  */
 function addStyles(css) {
-  const style = createElement('style', { type: 'text/css' });
+  const style = createElement("style", { type: "text/css" });
   style.textContent = css;
   document.head.appendChild(style);
   return style;
@@ -348,7 +358,7 @@ module.exports = {
   logInfo,
   logDebug,
   logSpamTracker,
-  
+
   // Core utilities
   sleep,
   qSelector,
@@ -356,27 +366,27 @@ module.exports = {
   waitForElement,
   randomDelay,
   retryWithBackoff,
-  
+
   // Data utilities
   safeJsonParse,
   safeJsonStringify,
   generateRandomString,
-  
+
   // Formatting utilities
   formatDuration,
   formatNumber,
   calculateRate,
   calculateETA,
-  
+
   // Page utilities
   isPageMatch,
   detectErrorPage,
-  
+
   // Browser utilities
   clearBrowserData,
   clearGoogleCookies,
-  
+
   // DOM utilities
   createElement,
-  addStyles
+  addStyles,
 };

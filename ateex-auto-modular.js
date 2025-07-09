@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Ateex Cloud Auto Script v3.0 - Modular Edition
+// @name         Ateex Cloud Auto Script v3.1.2 - Modular Edition
 // @namespace    http://tampermonkey.net/
 // @version      3.0.0
 // @description  Modular auto script for Ateex Cloud with GitHub-based module loading
@@ -29,7 +29,7 @@
 
   // Prevent multiple instances
   if (window.ateexAutoRunning) {
-    console.log("[Ateex Auto v3.0] Script already running, skipping...");
+    console.log("[Ateex Auto v3.1.2] Script already running, skipping...");
     return;
   }
   window.ateexAutoRunning = true;
@@ -288,7 +288,7 @@
    */
   async function initializeApp() {
     try {
-      log("🚀 Initializing Ateex Auto v3.0 - Modular Edition", "SUCCESS");
+      log("🚀 Initializing Ateex Auto v3.1.2 - Modular Edition", "SUCCESS");
 
       // Load core modules first
       log("Loading core modules...", "INFO");
@@ -323,7 +323,7 @@
           await autoEarn.initialize();
         }
 
-        log("🎉 Ateex Auto v3.0 initialized successfully!", "SUCCESS");
+        log("🎉 Ateex Auto v3.1.2 initialized successfully!", "SUCCESS");
       }
     } catch (error) {
       log(`Failed to initialize application: ${error.message}`, "ERROR");

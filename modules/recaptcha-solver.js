@@ -396,10 +396,13 @@ async function getTextFromAudio(audioURL) {
  * Main reCAPTCHA solver initialization
  */
 function initCaptchaSolver() {
+  // Setup message listeners first (for iframe communication)
+  setupMessageListeners();
+
   // Check if credentials are ready before allowing reCAPTCHA
   let credentialsReady = ateexGlobalState.credentialsReady;
 
-  // For iframe context, also check parent window
+  // For iframe context, also check parent window (with improved logic from original)
   if (window.parent && window.parent !== window) {
     try {
       if (
@@ -410,7 +413,8 @@ function initCaptchaSolver() {
         ateexGlobalState.credentialsReady = true;
       }
     } catch (e) {
-      // Cross-origin access might be blocked - use spam control
+      // Cross-origin access might be blocked - this is normal, don't spam
+      // Only log once per minute to prevent console spam
       logWithSpamControl(
         "Cannot access parent window state",
         "DEBUG",

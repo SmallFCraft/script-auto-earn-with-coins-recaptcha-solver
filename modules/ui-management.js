@@ -1,6 +1,6 @@
 /**
  * UI Management Module
- * Part of Ateex Auto v3.0 Modular Edition
+ * Part of Ateex Auto v3.0.0 Modular Edition
  * Handles UI components, counter, settings menu, popups and modals
  */
 
