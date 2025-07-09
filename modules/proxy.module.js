@@ -122,15 +122,15 @@
   let proxyList = [];
   let proxyStats = {};
   let lastUsedProxyIndex = -1;
-  let proxyEnabled = true; // Default enabled
+  let proxyEnabled = false; // Default disabled to avoid initial overhead
 
   // Check if proxy is enabled
   function isProxyEnabled() {
     try {
       const saved = localStorage.getItem(PROXY_ENABLED_KEY);
-      return saved !== null ? saved === "true" : true; // Default true
+      return saved !== null ? saved === "true" : false; // Default false (disabled)
     } catch (e) {
-      return true;
+      return false;
     }
   }
 
@@ -143,6 +143,88 @@
     } catch (e) {
       logError("Error saving proxy enabled state: " + e.message);
     }
+  }
+
+  // Auto-enable proxy when needed (like when blocked by Google)
+  function enableProxyForAutomatedQueries() {
+    if (!isProxyEnabled()) {
+      logInfo("🔄 Auto-enabling proxy due to automated queries detection");
+
+      // Ensure proxy data is loaded
+      ensureProxyDataLoaded();
+
+      setProxyEnabled(true);
+
+      // Test a few proxies in background without blocking
+      setTimeout(() => {
+        logInfo("🧪 Testing subset of proxies for immediate use...");
+        testProxySubset(5); // Test only first 5 proxies
+      }, 1000);
+
+      return true;
+    }
+    return false;
+  }
+
+  // Test only a subset of proxies for faster activation
+  async function testProxySubset(count = 5) {
+    if (!isProxyEnabled()) {
+      logWarning("Proxy disabled, skipping subset test");
+      return;
+    }
+
+    // Ensure proxy data is loaded
+    ensureProxyDataLoaded();
+
+    const testUrl = "https://httpbin.org/ip";
+    const subsetToTest = proxyList.slice(0, Math.min(count, proxyList.length));
+
+    logInfo(
+      `🧪 Testing ${subsetToTest.length} proxies for quick activation...`
+    );
+
+    let successCount = 0;
+
+    for (const proxy of subsetToTest) {
+      try {
+        const startTime = Date.now();
+        const response = await new Promise((resolve, reject) => {
+          const proxyConfig = getProxyConfig(proxy);
+
+          GM_xmlhttpRequest({
+            method: "GET",
+            url: testUrl,
+            timeout: 8000, // Shorter timeout for quick test
+            ...proxyConfig,
+            onload: resolve,
+            onerror: reject,
+            ontimeout: () => reject(new Error("Timeout")),
+          });
+        });
+
+        const responseTime = Date.now() - startTime;
+
+        if (response.status === 200) {
+          updateProxyStats(proxy.proxy, true, responseTime);
+          successCount++;
+          logSuccess(
+            `✅ Quick test passed: ${proxy.proxy} (${responseTime}ms)`
+          );
+        } else {
+          updateProxyStats(proxy.proxy, false, responseTime);
+        }
+      } catch (error) {
+        updateProxyStats(proxy.proxy, false, 8000);
+      }
+
+      // Small delay to avoid overwhelming
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    logSuccess(
+      `🧪 Quick test completed: ${successCount}/${subsetToTest.length} working`
+    );
+    return { tested: subsetToTest.length, passed: successCount };
   }
 
   // Parse proxy string để support cả 2 định dạng
@@ -299,9 +381,8 @@
 
   // Chọn proxy ngẫu nhiên với logic thông minh
   function selectRandomProxy(excludeProxies = []) {
-    if (proxyList.length === 0) {
-      loadProxyList();
-    }
+    // Ensure proxy data is loaded
+    ensureProxyDataLoaded();
 
     if (proxyList.length === 0) {
       logError("No proxies available");
@@ -587,6 +668,9 @@
 
   // Get proxy statistics summary
   function getProxyStatsSummary() {
+    // Ensure proxy data is loaded for UI display
+    ensureProxyDataLoaded();
+
     const summary = {
       totalProxies: proxyList.length,
       workingProxies: 0,
@@ -661,6 +745,9 @@
       return;
     }
 
+    // Ensure proxy data is loaded
+    ensureProxyDataLoaded();
+
     logInfo("🧪 Testing all proxies...");
     const testUrl = "https://httpbin.org/ip"; // Simple test endpoint
     let testedCount = 0;
@@ -729,23 +816,29 @@
   // ============= MODULE INITIALIZATION =============
 
   function initialize() {
-    loadProxyList();
-    loadProxyStats();
-    proxyEnabled = isProxyEnabled(); // Load proxy enabled state
-    logSuccess(
-      `[Proxy Module] Initialized with ${proxyList.length} proxies (${
-        proxyEnabled ? "enabled" : "disabled"
-      })`
-    );
+    proxyEnabled = isProxyEnabled(); // Load proxy enabled state first
 
-    // Auto-test proxies if no stats exist and proxy is enabled
-    if (proxyEnabled && Object.keys(proxyStats).length === 0) {
-      setTimeout(() => {
-        logInfo("🧪 No proxy statistics found, running initial proxy tests...");
-        testAllProxies().catch(error => {
-          logWarning("Initial proxy test failed: " + error.message);
-        });
-      }, 5000); // Wait 5 seconds after initialization
+    if (proxyEnabled) {
+      // Only load proxy data if enabled
+      loadProxyList();
+      loadProxyStats();
+      logSuccess(
+        `[Proxy Module] Initialized with ${proxyList.length} proxies (enabled)`
+      );
+      logInfo("🌐 Proxy system ready - will activate when needed");
+    } else {
+      // Lazy load - proxy data will be loaded when first enabled
+      logSuccess("[Proxy Module] Initialized (disabled)");
+      logInfo("🚫 Proxy system disabled - proxy data will load when needed");
+    }
+  }
+
+  // Lazy load proxy data when first enabled
+  function ensureProxyDataLoaded() {
+    if (proxyList.length === 0) {
+      logInfo("📡 Loading proxy data on first use...");
+      loadProxyList();
+      loadProxyStats();
     }
   }
 
@@ -762,8 +855,11 @@
   exports.getProxyStatsSummary = getProxyStatsSummary;
   exports.resetProxyStats = resetProxyStats;
   exports.testAllProxies = testAllProxies;
+  exports.testProxySubset = testProxySubset;
   exports.updateProxyStats = updateProxyStats;
   exports.markProxyAsBlocked = markProxyAsBlocked;
+  exports.enableProxyForAutomatedQueries = enableProxyForAutomatedQueries;
+  exports.ensureProxyDataLoaded = ensureProxyDataLoaded;
   exports.loadProxyList = loadProxyList;
   exports.saveProxyList = saveProxyList;
   exports.isProxyEnabled = isProxyEnabled;

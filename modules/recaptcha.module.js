@@ -340,9 +340,18 @@
 
   async function handleAutomatedQueriesWithProxy() {
     try {
-      logInfo("🔄 Handling automated queries with proxy strategy...");
+      logInfo("🔄 Handling automated queries with enhanced proxy strategy...");
 
-      // Check if proxy is enabled
+      // Auto-enable proxy if not already enabled
+      const wasProxyEnabled = proxy.isProxyEnabled();
+      if (!wasProxyEnabled) {
+        logInfo(
+          "🌐 Auto-enabling proxy system for automated queries recovery..."
+        );
+        proxy.enableProxyForAutomatedQueries();
+      }
+
+      // Check if proxy is enabled (after potential auto-enable)
       if (proxy.isProxyEnabled()) {
         logInfo("🌐 Proxy enabled - implementing proxy rotation strategy");
 

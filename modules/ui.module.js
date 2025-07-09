@@ -512,8 +512,9 @@
           <div style="margin-top: 15px; font-size: 12px; opacity: 0.8;">
             <div><strong>Status Legend:</strong> ✅ Good | ⚠️ Warning | ❌ Failed | 🚫 Blocked | 🔶 Recovering | ⚪ Unused</div>
             <div><strong>Auth Icons:</strong> 🔐 Has Auth | 🚫 No Auth</div>
+            <div><strong>Auto-Enable:</strong> Proxy activates automatically when Google detects automation</div>
             <div><strong>Recovery:</strong> Use "Recover from Block" if Google detects automation</div>
-            <div>Proxies rotate automatically for each reCAPTCHA request</div>
+            <div>Proxies rotate automatically for each reCAPTCHA request when enabled</div>
           </div>
         </div>
       `;
@@ -526,11 +527,45 @@
           callback: () => {
             if (AteexModules.proxy) {
               const currentState = AteexModules.proxy.isProxyEnabled();
-              AteexModules.proxy.setProxyEnabled(!currentState);
-              logSuccess(`🌐 Proxy ${!currentState ? "enabled" : "disabled"}`);
+
+              if (!currentState) {
+                // Enabling proxy - use quick enable function
+                logInfo("🌐 Enabling proxy with quick activation...");
+                AteexModules.proxy.enableProxyForAutomatedQueries();
+              } else {
+                // Disabling proxy
+                AteexModules.proxy.setProxyEnabled(false);
+                logSuccess("🚫 Proxy disabled");
+              }
 
               // Close and reopen modal to refresh
               setTimeout(() => this.showProxyManager(), 500);
+            }
+          },
+        },
+        {
+          label: "Quick Test (5 Proxies)",
+          callback: async () => {
+            if (AteexModules.proxy) {
+              if (!AteexModules.proxy.isProxyEnabled()) {
+                logInfo("🌐 Enabling proxy for quick test...");
+                AteexModules.proxy.setProxyEnabled(true);
+              }
+
+              logInfo("🧪 Starting quick proxy test...");
+              try {
+                const result = await AteexModules.proxy.testProxySubset(5);
+                if (result) {
+                  logSuccess(
+                    `🧪 Quick test completed: ${result.passed}/${result.tested} proxies working`
+                  );
+                }
+
+                // Close and reopen modal to refresh stats
+                setTimeout(() => this.showProxyManager(), 1000);
+              } catch (error) {
+                logError("🧪 Quick test failed: " + error.message);
+              }
             }
           },
         },
