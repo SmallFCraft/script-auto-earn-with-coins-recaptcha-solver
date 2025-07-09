@@ -445,28 +445,60 @@
           core.state.captchaInProgress = false;
           core.state.lastSolvedTime = Date.now();
 
-          // Notify parent window if in iframe
+          // Notify parent window if in iframe (enhanced messaging)
           try {
+            const message = {
+              type: "ateex_captcha_solved",
+              solved: true,
+              timestamp: Date.now(),
+            };
+
+            // Send to parent window
             if (window.parent && window.parent !== window) {
-              window.parent.postMessage(
-                {
-                  type: "ateex_captcha_solved",
-                  solved: true,
-                  timestamp: Date.now(),
-                },
-                "*"
-              );
+              window.parent.postMessage(message, "*");
+              logInfo("📤 Sent captcha solved message to parent window");
             }
+
+            // Also send to top window (in case of nested iframes)
+            if (window.top && window.top !== window) {
+              window.top.postMessage(message, "*");
+              logInfo("📤 Sent captcha solved message to top window");
+            }
+
+            // Send to all frames
+            const frames = document.querySelectorAll("iframe");
+            frames.forEach(frame => {
+              try {
+                frame.contentWindow.postMessage(message, "*");
+              } catch (e) {
+                // Ignore cross-origin errors
+              }
+            });
           } catch (e) {
-            // Silent error - not critical
+            logWarning("Error sending captcha solved message: " + e.message);
           }
 
           // Trigger custom event to notify login page
-          window.dispatchEvent(
-            new CustomEvent("recaptchaSolved", {
-              detail: { solved: true },
-            })
-          );
+          try {
+            window.dispatchEvent(
+              new CustomEvent("recaptchaSolved", {
+                detail: { solved: true, timestamp: Date.now() },
+              })
+            );
+
+            // Also trigger on parent/top windows
+            if (window.parent && window.parent !== window) {
+              window.parent.dispatchEvent(
+                new CustomEvent("recaptchaSolved", {
+                  detail: { solved: true, timestamp: Date.now() },
+                })
+              );
+            }
+
+            logInfo("📡 Triggered custom recaptchaSolved events");
+          } catch (e) {
+            logWarning("Error triggering custom events: " + e.message);
+          }
         }
 
         if (requestCount > MAX_ATTEMPTS) {
@@ -522,7 +554,9 @@
           qSelector(DOSCAPTCHA) &&
           qSelector(DOSCAPTCHA).innerText.length > 0
         ) {
-          logWarning("Automated Queries Detected - clearing storage and implementing cooldown");
+          logWarning(
+            "Automated Queries Detected - clearing storage and implementing cooldown"
+          );
 
           // Clear Google cookies and reload to reset limits
           await core.clearGoogleCookies(true);
@@ -536,7 +570,9 @@
           // No need for setTimeout since we'll reload the page
         }
       } catch (err) {
-        logError("An error occurred while solving. Stopping the solver: " + err.message);
+        logError(
+          "An error occurred while solving. Stopping the solver: " + err.message
+        );
         core.state.captchaInProgress = false;
         clearInterval(captchaInterval);
       }

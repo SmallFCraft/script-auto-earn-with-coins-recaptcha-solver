@@ -132,14 +132,38 @@
     logInfo("🔑 On login page");
 
     try {
-      // Listen for messages from iframe
-      window.addEventListener("message", function (event) {
+      // Listen for messages from iframe with improved handling
+      const handleCaptchaMessage = function (event) {
         if (event.data && event.data.type === "ateex_captcha_solved") {
-          logSuccess("Received captcha solved message from iframe");
+          logSuccess("✅ Received captcha solved message from iframe");
           core.state.captchaSolved = true;
           core.state.captchaInProgress = false;
           core.state.lastSolvedTime = event.data.timestamp;
+          logInfo(
+            "🔄 Updated captcha state: solved = true, inProgress = false"
+          );
+
+          // Immediately attempt form submission when message received
+          logInfo("🚀 Auto-submitting form after receiving solved message...");
+          setTimeout(async () => {
+            await attemptFormSubmission();
+          }, 2000); // Wait 2 seconds for any remaining processing
         }
+      };
+
+      window.addEventListener("message", handleCaptchaMessage);
+
+      // Also listen for custom events from reCAPTCHA
+      window.addEventListener("recaptchaSolved", function (event) {
+        logSuccess("✅ Received custom recaptchaSolved event");
+        core.state.captchaSolved = true;
+        core.state.captchaInProgress = false;
+        core.state.lastSolvedTime = Date.now();
+
+        logInfo("🚀 Auto-submitting form after custom event...");
+        setTimeout(async () => {
+          await attemptFormSubmission();
+        }, 2000);
       });
 
       // STEP 1: Ensure credentials are available FIRST
@@ -256,9 +280,11 @@
       }
 
       // STEP 5: Handle reCAPTCHA (only after form is filled)
+      logInfo("🔍 Checking reCAPTCHA status...");
+
       // Check if captcha was already solved in iframe
       if (core.state.captchaSolved) {
-        logSuccess("reCAPTCHA already solved, proceeding with login");
+        logSuccess("✅ reCAPTCHA already solved, proceeding with login");
       } else {
         // Look for reCAPTCHA element
         const recaptchaElement =
@@ -268,12 +294,16 @@
           qSelector('iframe[src*="recaptcha"]');
 
         if (recaptchaElement) {
-          logInfo("Found reCAPTCHA element, waiting for solver...");
+          logInfo("🔄 Found reCAPTCHA element, waiting for solver...");
           core.state.captchaInProgress = true;
 
           // Wait for reCAPTCHA to be solved (60 seconds timeout)
           let captchaWaitTime = 0;
           const maxCaptchaWait = 60000;
+
+          logInfo(
+            `⏱️ Starting captcha wait loop (max ${maxCaptchaWait / 1000}s)`
+          );
 
           while (
             !core.state.captchaSolved &&
@@ -282,45 +312,122 @@
             await sleep(1000);
             captchaWaitTime += 1000;
 
-            // Check global state
+            // Check global state more frequently and with debug
             if (core.state.captchaSolved) {
-              logSuccess("reCAPTCHA solved by iframe!");
+              logSuccess("🎉 reCAPTCHA solved by iframe!");
               break;
             }
 
-            // Log progress every 20 seconds to reduce spam
-            if (captchaWaitTime % 20000 === 0) {
-              core.logWithSpamControl(
-                `Still waiting for reCAPTCHA... ${
+            // Log progress every 10 seconds for better tracking
+            if (captchaWaitTime % 10000 === 0) {
+              logInfo(
+                `⏳ Still waiting for reCAPTCHA... ${
                   captchaWaitTime / 1000
-                }s elapsed`,
-                "INFO",
-                "captcha_wait_progress"
+                }s elapsed (captchaSolved: ${core.state.captchaSolved})`
               );
             }
           }
 
           if (core.state.captchaSolved) {
-            logSuccess("reCAPTCHA solved successfully, proceeding with login");
-            // Wait longer for reCAPTCHA state to propagate
+            logSuccess(
+              "✅ reCAPTCHA solved successfully, proceeding with login"
+            );
+            logInfo("⏱️ Waiting 3 seconds for reCAPTCHA state to propagate...");
             await sleep(3000);
+            logInfo("✅ Wait complete, ready for form submission");
           } else {
             logWarning(
-              "reCAPTCHA not solved within timeout period, attempting login anyway"
+              `⚠️ reCAPTCHA not solved within timeout period (${
+                maxCaptchaWait / 1000
+              }s), attempting login anyway`
+            );
+            logInfo(
+              `📊 Final state: captchaSolved=${core.state.captchaSolved}, captchaInProgress=${core.state.captchaInProgress}`
             );
           }
         } else {
-          logInfo("No reCAPTCHA found on page, proceeding with login");
+          logInfo("ℹ️ No reCAPTCHA found on page, proceeding with login");
         }
       }
 
       // STEP 6: Enhanced form submission with retry logic
+      logInfo("🚀 Starting form submission process...");
       await attemptFormSubmission();
 
-      logSuccess("Login process completed, monitoring result...");
+      // STEP 7: Add fallback mechanism to check for successful reCAPTCHA in DOM
+      logInfo("🔄 Setting up fallback captcha detection...");
+      setupCaptchaFallbackDetection();
+
+      logSuccess("✅ Login process completed, monitoring result...");
     } catch (error) {
       logError("Error in handleLoginPage: " + error.message);
     }
+  }
+
+  // Fallback detection for successful reCAPTCHA in DOM
+  function setupCaptchaFallbackDetection() {
+    let checkCount = 0;
+    const maxChecks = 30; // Check for 30 times (5 minutes at 10s intervals)
+
+    const fallbackInterval = setInterval(() => {
+      checkCount++;
+
+      try {
+        // Check DOM for successful reCAPTCHA indicators
+        const recaptchaTokens = [
+          document.querySelector('textarea[name="g-recaptcha-response"]'),
+          document.querySelector('textarea[id*="recaptcha-response"]'),
+          document.querySelector('[name="g-recaptcha-response"]'),
+        ].filter(el => el && el.value && el.value.length > 0);
+
+        // Check for success checkmark or solved status
+        const successIndicators = [
+          document.querySelector(".recaptcha-checkbox-checked"),
+          document.querySelector('[aria-checked="true"]'),
+          document.querySelector(".rc-anchor-checkbox-checked"),
+        ].filter(el => el !== null);
+
+        const hasToken = recaptchaTokens.length > 0;
+        const hasSuccessIndicator = successIndicators.length > 0;
+
+        if (hasToken || hasSuccessIndicator) {
+          logSuccess("🎉 Fallback detection: reCAPTCHA appears to be solved!");
+          logInfo(
+            `📊 Detection details: tokens=${hasToken}, indicators=${hasSuccessIndicator}`
+          );
+
+          // Update state and attempt form submission
+          core.state.captchaSolved = true;
+          core.state.captchaInProgress = false;
+
+          clearInterval(fallbackInterval);
+
+          logInfo("🔄 Triggering fallback form submission...");
+          setTimeout(async () => {
+            await attemptFormSubmission();
+          }, 1000);
+
+          return;
+        }
+
+        // Log progress every 5 checks (50 seconds)
+        if (checkCount % 5 === 0) {
+          logInfo(
+            `⏳ Fallback detection: check ${checkCount}/${maxChecks} (tokens: ${hasToken}, indicators: ${hasSuccessIndicator})`
+          );
+        }
+
+        // Stop after max attempts
+        if (checkCount >= maxChecks) {
+          logInfo("⏹️ Fallback detection stopped after max attempts");
+          clearInterval(fallbackInterval);
+        }
+      } catch (e) {
+        logError("Error in fallback detection: " + e.message);
+      }
+    }, 10000); // Check every 10 seconds
+
+    logInfo("✅ Fallback captcha detection active (checking every 10s)");
   }
 
   // Enhanced form submission function with retry mechanism
