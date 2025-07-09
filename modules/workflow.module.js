@@ -1,830 +1,339 @@
 /**
- * Workflow Module - Auto-earning workflow logic
- * Handles page-specific logic for login, home, earn pages and overall workflow
+ * Workflow Module v4.0 - Main workflow orchestrator for hierarchical system
+ * Serves as the primary entry point and delegates to the navigation handler
  */
 
 (function (exports) {
   "use strict";
 
-  // Get dependencies
-  const core = AteexModules.core;
-  const credentials = AteexModules.credentials;
-  const data = AteexModules.data;
-  const ui = AteexModules.ui;
-  const recaptcha = AteexModules.recaptcha;
-  const { log, logInfo, logError, logSuccess, logWarning, qSelector, sleep } =
-    core;
+  // Get dependencies from new hierarchical structure
+  const navigationHandler = AteexModules.navigationHandler;
+  const coreModule = AteexModules.coreModule;
+  const errorManager = AteexModules.errorManager;
+  const uiManager = AteexModules.uiManager;
+  const credentialsModule = AteexModules.credentialsModule;
+  const recaptchaModule = AteexModules.recaptchaModule;
+  const statsManager = AteexModules.statsManager;
+  const dataModule = AteexModules.dataModule;
 
-  // ============= WORKFLOW STATE =============
+  // ============= WORKFLOW ORCHESTRATOR v4.0 =============
 
-  let CONFIG = null;
-
-  // ============= PAGE HANDLERS =============
-
-  // Handle earn page
-  async function handleEarnPage() {
-    // Check if script should be stopped
-    if (window.scriptStopped) {
-      logInfo("🛑 Earn page handler stopped - script stopped");
-      return;
+  class WorkflowOrchestrator {
+    constructor() {
+      this.isInitialized = false;
+      this.isStarted = false;
     }
 
-    // Check if auto stats is enabled
-    if (!core.state.autoStatsEnabled) {
-      core.logWithSpamControl(
-        "⏳ Earn page waiting - auto stats not enabled",
-        "WARNING",
-        "earn_page_waiting"
-      );
-      return;
-    }
-
-    logInfo("📈 On earn page");
-
-    try {
-      // Wait 5 seconds
-      await sleep(5000);
-
-      // Find Clickcoin row accurately according to HTML structure
-      const clickcoinRow = Array.from(document.querySelectorAll("tr")).find(
-        row => {
-          const tdElements = row.querySelectorAll("td");
-          return (
-            tdElements.length > 0 &&
-            tdElements[0].textContent.trim() === "Clickcoin"
-          );
-        }
-      );
-
-      if (clickcoinRow) {
-        // Find Start link in Clickcoin row
-        const startLink = clickcoinRow.querySelector(
-          'a[href*="/earn/clickcoin"]'
-        );
-        if (startLink) {
-          logSuccess("Found Clickcoin Start link, clicking...");
-
-          // Ensure link opens in new tab
-          startLink.setAttribute("target", "_blank");
-          startLink.setAttribute("rel", "noopener noreferrer");
-
-          // Click link
-          startLink.click();
-
-          // Wait 7 seconds for popup ads to load and complete
-          await sleep(7000);
-
-          // Increment cycle counter
-          data.incrementCycle();
-
-          // Perform logout
-          ui.logout();
-
-          // Wait for logout to complete before clearing data
-          await sleep(2000);
-
-          // Clear browser data
-          await data.clearBrowserData();
-        } else {
-          // Fallback: find button in row
-          const startButton = clickcoinRow.querySelector("button");
-          if (startButton) {
-            logSuccess("Found Clickcoin Start button, clicking...");
-            startButton.click();
-            await sleep(7000); // Wait 7 seconds for popup and ads
-            data.incrementCycle();
-            ui.logout();
-            await sleep(2000);
-            await data.clearBrowserData();
-          } else {
-            logWarning("No Start button found in Clickcoin row");
-          }
-        }
-      } else {
-        logWarning("Clickcoin row not found");
-        // Debug: log all rows
-        const allRows = document.querySelectorAll("tr");
-        logError(`Found ${allRows.length} rows in table, but no Clickcoin row`);
+    // Initialize the workflow system
+    async initialize() {
+      if (this.isInitialized) {
+        return true;
       }
-    } catch (error) {
-      logError("Error in handleEarnPage: " + error.message);
-    }
-  }
-
-  // Handle login page
-  async function handleLoginPage() {
-    // Check if script should be stopped
-    if (window.scriptStopped) {
-      logInfo("🛑 Login page handler stopped - script stopped");
-      return;
-    }
-
-    // Check if auto stats is enabled
-    if (!core.state.autoStatsEnabled) {
-      core.logWithSpamControl(
-        "⏳ Login page waiting - auto stats not enabled",
-        "WARNING",
-        "login_page_waiting"
-      );
-      return;
-    }
-
-    logInfo("🔑 On login page");
-
-    try {
-      // Listen for messages from iframe with improved handling
-      const handleCaptchaMessage = function (event) {
-        if (event.data && event.data.type === "ateex_captcha_solved") {
-          logSuccess("✅ Received captcha solved message from iframe");
-          core.state.captchaSolved = true;
-          core.state.captchaInProgress = false;
-          core.state.lastSolvedTime = event.data.timestamp;
-          logInfo(
-            "🔄 Updated captcha state: solved = true, inProgress = false"
-          );
-
-          // Immediately attempt form submission when message received
-          logInfo("🚀 Auto-submitting form after receiving solved message...");
-          setTimeout(async () => {
-            await attemptFormSubmission();
-          }, 2000); // Wait 2 seconds for any remaining processing
-        }
-      };
-
-      window.addEventListener("message", handleCaptchaMessage);
-
-      // Also listen for custom events from reCAPTCHA
-      window.addEventListener("recaptchaSolved", function (event) {
-        logSuccess("✅ Received custom recaptchaSolved event");
-        core.state.captchaSolved = true;
-        core.state.captchaInProgress = false;
-        core.state.lastSolvedTime = Date.now();
-
-        logInfo("🚀 Auto-submitting form after custom event...");
-        setTimeout(async () => {
-          await attemptFormSubmission();
-        }, 2000);
-      });
-
-      // STEP 1: Ensure credentials are available FIRST
-      if (!CONFIG || !CONFIG.email || !CONFIG.password) {
-        logInfo("Getting credentials...");
-        CONFIG = await credentials.getCredentials();
-
-        if (!CONFIG) {
-          logWarning("User cancelled credential input, stopping script");
-          logWarning(
-            "reCAPTCHA will remain blocked until credentials are provided"
-          );
-          return;
-        }
-
-        logSuccess("Credentials obtained successfully");
-      }
-
-      // CRITICAL: Mark credentials as ready to allow reCAPTCHA
-      core.state.credentialsReady = true;
-      logSuccess("Credentials ready - reCAPTCHA can now proceed");
-
-      // Notify all iframes that credentials are ready
-      try {
-        const message = {
-          type: "ateex_credentials_ready",
-          timestamp: Date.now(),
-        };
-
-        // Send to all frames
-        const frames = document.querySelectorAll("iframe");
-        if (frames.length > 0) {
-          frames.forEach(frame => {
-            try {
-              frame.contentWindow.postMessage(message, "*");
-            } catch (e) {
-              // Ignore cross-origin errors
-            }
-          });
-        }
-      } catch (e) {
-        logError("Error sending credentials ready message: " + e.message);
-      }
-
-      // STEP 2: Wait before proceeding (5-10 seconds as requested)
-      const waitTime = Math.random() * 5000 + 5000; // 5-10 seconds
-      await sleep(waitTime);
-
-      // STEP 3: Validate credentials (should be valid at this point)
-      if (!CONFIG || !CONFIG.email || !CONFIG.password) {
-        logWarning(
-          "No valid credentials available - auto stats may not be enabled yet"
-        );
-        logInfo("⏳ Waiting for credentials setup to complete...");
-        return; // Gracefully exit without blocking
-      }
-
-      if (!credentials.isValidUsernameOrEmail(CONFIG.email)) {
-        logError("Invalid username/email format in credentials");
-        credentials.clearCredentials();
-        logWarning(
-          "⚠️ Invalid credentials detected - clearing and waiting for new setup"
-        );
-        return; // Gracefully exit, let new flow handle re-setup
-      }
-
-      if (!credentials.isValidPassword(CONFIG.password)) {
-        logError("Invalid password in credentials");
-        credentials.clearCredentials();
-        logWarning(
-          "⚠️ Invalid password detected - clearing and waiting for new setup"
-        );
-        return; // Gracefully exit, let new flow handle re-setup
-      }
-
-      // STEP 4: Fill login form
-
-      // Fill email/username
-      const emailInput = qSelector('input[name="email"]');
-      if (emailInput) {
-        emailInput.value = CONFIG.email;
-        emailInput.dispatchEvent(new Event("input", { bubbles: true }));
-      } else {
-        // Try alternative selectors
-        const altEmailInput =
-          qSelector('input[type="email"]') ||
-          qSelector('input[placeholder*="email" i]') ||
-          qSelector('input[id*="email" i]');
-        if (altEmailInput) {
-          altEmailInput.value = CONFIG.email;
-          altEmailInput.dispatchEvent(new Event("input", { bubbles: true }));
-        } else {
-          logError("Could not find any email input field");
-        }
-      }
-
-      // Fill password
-      const passwordInput = qSelector('input[name="password"]');
-      if (passwordInput) {
-        passwordInput.value = CONFIG.password;
-        passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
-      } else {
-        // Try alternative selectors
-        const altPasswordInput =
-          qSelector('input[type="password"]') ||
-          qSelector('input[placeholder*="password" i]') ||
-          qSelector('input[id*="password" i]');
-        if (altPasswordInput) {
-          altPasswordInput.value = CONFIG.password;
-          altPasswordInput.dispatchEvent(new Event("input", { bubbles: true }));
-        } else {
-          logError("Could not find any password input field");
-        }
-      }
-
-      // STEP 5: Handle reCAPTCHA (only after form is filled)
-      logInfo("🔍 Checking reCAPTCHA status...");
-
-      // Check if captcha was already solved in iframe
-      if (core.state.captchaSolved) {
-        logSuccess("✅ reCAPTCHA already solved, proceeding with login");
-      } else {
-        // Look for reCAPTCHA element
-        const recaptchaElement =
-          qSelector(".g-recaptcha") ||
-          qSelector("#recaptcha-element") ||
-          qSelector("[data-sitekey]") ||
-          qSelector('iframe[src*="recaptcha"]');
-
-        if (recaptchaElement) {
-          logInfo("🔄 Found reCAPTCHA element, waiting for solver...");
-          core.state.captchaInProgress = true;
-
-          // Wait for reCAPTCHA to be solved (60 seconds timeout)
-          let captchaWaitTime = 0;
-          const maxCaptchaWait = 60000;
-
-          logInfo(
-            `⏱️ Starting captcha wait loop (max ${maxCaptchaWait / 1000}s)`
-          );
-
-          while (
-            !core.state.captchaSolved &&
-            captchaWaitTime < maxCaptchaWait
-          ) {
-            await sleep(1000);
-            captchaWaitTime += 1000;
-
-            // Check global state more frequently and with debug
-            if (core.state.captchaSolved) {
-              logSuccess("🎉 reCAPTCHA solved by iframe!");
-              break;
-            }
-
-            // Log progress every 10 seconds for better tracking
-            if (captchaWaitTime % 10000 === 0) {
-              logInfo(
-                `⏳ Still waiting for reCAPTCHA... ${
-                  captchaWaitTime / 1000
-                }s elapsed (captchaSolved: ${core.state.captchaSolved})`
-              );
-            }
-          }
-
-          if (core.state.captchaSolved) {
-            logSuccess(
-              "✅ reCAPTCHA solved successfully, proceeding with login"
-            );
-            logInfo("⏱️ Waiting 3 seconds for reCAPTCHA state to propagate...");
-            await sleep(3000);
-            logInfo("✅ Wait complete, ready for form submission");
-          } else {
-            logWarning(
-              `⚠️ reCAPTCHA not solved within timeout period (${
-                maxCaptchaWait / 1000
-              }s), attempting login anyway`
-            );
-            logInfo(
-              `📊 Final state: captchaSolved=${core.state.captchaSolved}, captchaInProgress=${core.state.captchaInProgress}`
-            );
-          }
-        } else {
-          logInfo("ℹ️ No reCAPTCHA found on page, proceeding with login");
-        }
-      }
-
-      // STEP 6: Enhanced form submission with retry logic
-      logInfo("🚀 Starting form submission process...");
-      await attemptFormSubmission();
-
-      // STEP 7: Add fallback mechanism to check for successful reCAPTCHA in DOM
-      logInfo("🔄 Setting up fallback captcha detection...");
-      setupCaptchaFallbackDetection();
-
-      logSuccess("✅ Login process completed, monitoring result...");
-    } catch (error) {
-      logError("Error in handleLoginPage: " + error.message);
-    }
-  }
-
-  // Fallback detection for successful reCAPTCHA in DOM
-  function setupCaptchaFallbackDetection() {
-    let checkCount = 0;
-    const maxChecks = 30; // Check for 30 times (5 minutes at 10s intervals)
-
-    const fallbackInterval = setInterval(() => {
-      checkCount++;
 
       try {
-        // Check DOM for successful reCAPTCHA indicators
-        const recaptchaTokens = [
-          document.querySelector('textarea[name="g-recaptcha-response"]'),
-          document.querySelector('textarea[id*="recaptcha-response"]'),
-          document.querySelector('[name="g-recaptcha-response"]'),
-        ].filter(el => el && el.value && el.value.length > 0);
+        errorManager.logInfo(
+          "Workflow",
+          "🚀 Initializing Ateex Auto CAPTCHA v4.0..."
+        );
 
-        // Check for success checkmark or solved status
-        const successIndicators = [
-          document.querySelector(".recaptcha-checkbox-checked"),
-          document.querySelector('[aria-checked="true"]'),
-          document.querySelector(".rc-anchor-checkbox-checked"),
-        ].filter(el => el !== null);
+        // Initialize core systems first
+        await this.initializeCoreModules();
 
-        const hasToken = recaptchaTokens.length > 0;
-        const hasSuccessIndicator = successIndicators.length > 0;
-
-        if (hasToken || hasSuccessIndicator) {
-          logSuccess("🎉 Fallback detection: reCAPTCHA appears to be solved!");
-          logInfo(
-            `📊 Detection details: tokens=${hasToken}, indicators=${hasSuccessIndicator}`
-          );
-
-          // Update state and attempt form submission
-          core.state.captchaSolved = true;
-          core.state.captchaInProgress = false;
-
-          clearInterval(fallbackInterval);
-
-          logInfo("🔄 Triggering fallback form submission...");
-          setTimeout(async () => {
-            await attemptFormSubmission();
-          }, 1000);
-
-          return;
-        }
-
-        // Log progress every 5 checks (50 seconds)
-        if (checkCount % 5 === 0) {
-          logInfo(
-            `⏳ Fallback detection: check ${checkCount}/${maxChecks} (tokens: ${hasToken}, indicators: ${hasSuccessIndicator})`
-          );
-        }
-
-        // Stop after max attempts
-        if (checkCount >= maxChecks) {
-          logInfo("⏹️ Fallback detection stopped after max attempts");
-          clearInterval(fallbackInterval);
-        }
-      } catch (e) {
-        logError("Error in fallback detection: " + e.message);
-      }
-    }, 10000); // Check every 10 seconds
-
-    logInfo("✅ Fallback captcha detection active (checking every 10s)");
-  }
-
-  // Enhanced form submission function with retry mechanism
-  async function attemptFormSubmission() {
-    logInfo("🔐 Attempting form submission...");
-
-    let submitSuccess = false;
-    let attempts = 0;
-    const maxAttempts = 3;
-
-    while (!submitSuccess && attempts < maxAttempts) {
-      attempts++;
-      logInfo(`📝 Form submission attempt ${attempts}/${maxAttempts}`);
-
-      try {
-        // Method 1: Try form submission
-        const loginForm =
-          qSelector('form[action*="login"]') || qSelector("form");
-        if (loginForm) {
-          logInfo("Found login form, submitting...");
-
-          // Verify form has required fields filled
-          const emailField = loginForm.querySelector(
-            'input[name="email"], input[type="email"]'
-          );
-          const passwordField = loginForm.querySelector(
-            'input[name="password"], input[type="password"]'
-          );
-
-          if (
-            emailField &&
-            passwordField &&
-            emailField.value &&
-            passwordField.value
-          ) {
-            // Trigger form validation events
-            emailField.dispatchEvent(new Event("blur", { bubbles: true }));
-            passwordField.dispatchEvent(new Event("blur", { bubbles: true }));
-
-            await sleep(500); // Small delay for validation
-
-            loginForm.submit();
-            logSuccess("✅ Login form submitted successfully");
-            submitSuccess = true;
-
-            // Start monitoring for login result
-            setTimeout(credentials.monitorLoginResult, 1000);
-            break;
-          } else {
-            logWarning(
-              "⚠️ Form fields not properly filled, trying alternative method"
-            );
-          }
-        }
-
-        // Method 2: Try button click if form submission failed
-        if (!submitSuccess) {
-          const signInButtons = [
-            qSelector('button[type="submit"]'),
-            qSelector('input[type="submit"]'),
-            qSelector('button[class*="login"]'),
-            qSelector('button[id*="login"]'),
-            qSelector('button[class*="submit"]'),
-            qSelector('input[value*="Login"]'),
-            qSelector('input[value*="Sign"]'),
-            qSelector('button:contains("Login")'),
-            qSelector('button:contains("Sign")'),
-          ].filter(btn => btn !== null);
-
-          for (const button of signInButtons) {
-            if (button && !button.disabled) {
-              logInfo(
-                `🔘 Trying button: ${button.tagName} - ${
-                  button.type || "N/A"
-                } - ${button.textContent?.trim() || button.value || "No text"}`
-              );
-
-              // Ensure button is visible and clickable
-              if (button.offsetParent !== null) {
-                // Focus and click with events
-                button.focus();
-                await sleep(100);
-
-                button.dispatchEvent(new Event("mousedown", { bubbles: true }));
-                button.dispatchEvent(new Event("mouseup", { bubbles: true }));
-                button.click();
-
-                logSuccess("✅ Login button clicked successfully");
-                submitSuccess = true;
-
-                // Start monitoring for login result
-                setTimeout(credentials.monitorLoginResult, 1000);
-                break;
-              }
-            }
-          }
-        }
-
-        // Method 3: Try Enter key simulation if buttons failed
-        if (!submitSuccess && attempts >= 2) {
-          logInfo("🔑 Trying Enter key simulation as fallback");
-
-          const passwordField = qSelector('input[type="password"]');
-          if (passwordField) {
-            passwordField.focus();
-            await sleep(100);
-
-            // Simulate Enter key press
-            const enterEvent = new KeyboardEvent("keydown", {
-              key: "Enter",
-              code: "Enter",
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-            });
-
-            passwordField.dispatchEvent(enterEvent);
-
-            // Also try on document
-            document.dispatchEvent(enterEvent);
-
-            logInfo("🔑 Enter key simulation completed");
-            submitSuccess = true;
-
-            // Start monitoring for login result
-            setTimeout(credentials.monitorLoginResult, 1000);
-          }
-        }
-
-        if (!submitSuccess && attempts < maxAttempts) {
-          logWarning(
-            `⏳ Attempt ${attempts} failed, waiting 2s before retry...`
-          );
-          await sleep(2000);
-        }
+        this.isInitialized = true;
+        errorManager.logSuccess(
+          "Workflow",
+          "✅ Workflow orchestrator initialized"
+        );
+        return true;
       } catch (error) {
-        logError(
-          `❌ Error in submission attempt ${attempts}: ${error.message}`
+        errorManager.handleError(error, {
+          context: "workflow_init",
+          category: "workflow",
+        });
+        return false;
+      }
+    }
+
+    // Initialize core modules
+    async initializeCoreModules() {
+      const modules = [
+        { name: "Navigation Handler", module: navigationHandler },
+        { name: "Stats Manager", module: statsManager },
+        { name: "Data Module", module: dataModule },
+      ];
+
+      for (const { name, module } of modules) {
+        if (module.initialize) {
+          const success = await module.initialize();
+          if (success) {
+            errorManager.logInfo("Workflow", `✅ ${name} initialized`);
+          } else {
+            errorManager.logWarning(
+              "Workflow",
+              `⚠️ ${name} initialization failed`
+            );
+          }
+        }
+      }
+    }
+
+    // Start the main workflow
+    async start() {
+      if (this.isStarted) {
+        errorManager.logInfo("Workflow", "Workflow already started");
+        return;
+      }
+
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
+
+      try {
+        this.isStarted = true;
+        errorManager.logInfo("Workflow", "🎯 Starting main workflow...");
+
+        // Start the navigation handler (which handles all page logic)
+        await navigationHandler.initialize();
+
+        errorManager.logSuccess(
+          "Workflow",
+          "🚀 Ateex Auto CAPTCHA v4.0 started successfully!"
         );
-        if (attempts < maxAttempts) {
-          await sleep(2000);
-        }
+      } catch (error) {
+        errorManager.handleError(error, {
+          context: "workflow_start",
+          category: "workflow",
+        });
+        this.isStarted = false;
       }
     }
 
-    if (submitSuccess) {
-      logSuccess("✅ Form submission completed successfully");
-    } else {
-      logError("❌ All form submission attempts failed");
+    // Stop the workflow
+    stop() {
+      if (!this.isStarted) {
+        return;
+      }
 
-      // Final fallback: reload page after 5 seconds
-      logWarning("🔄 Will reload page in 5 seconds as final fallback");
-      setTimeout(() => {
-        logInfo("🔄 Reloading page due to form submission failure");
-        window.location.reload();
-      }, 5000);
+      try {
+        errorManager.logInfo("Workflow", "🛑 Stopping workflow...");
+
+        // Cleanup all modules
+        if (navigationHandler.cleanup) navigationHandler.cleanup();
+        if (uiManager.cleanup) uiManager.cleanup();
+        if (recaptchaModule.cleanup) recaptchaModule.cleanup();
+
+        this.isStarted = false;
+        this.isInitialized = false;
+
+        errorManager.logSuccess(
+          "Workflow",
+          "✅ Workflow stopped and cleaned up"
+        );
+      } catch (error) {
+        errorManager.handleError(error, {
+          context: "workflow_stop",
+          category: "workflow",
+        });
+      }
+    }
+
+    // Get workflow status
+    getStatus() {
+      return {
+        initialized: this.isInitialized,
+        started: this.isStarted,
+        autoStatsActive: statsManager.isAutoStatsActive(),
+        credentialsReady: coreModule.getState("credentialsReady"),
+        currentPage: navigationHandler.getCurrentPage(),
+      };
     }
   }
 
-  // Handle home page
-  async function handleHomePage() {
-    // Check if script should be stopped
-    if (window.scriptStopped) {
-      logInfo("🛑 Home page handler stopped - script stopped");
-      return;
-    }
+  // ============= SINGLETON INSTANCE =============
 
-    // Check if auto stats is enabled
-    if (!core.state.autoStatsEnabled) {
-      core.logWithSpamControl(
-        "⏳ Home page waiting - auto stats not enabled",
-        "WARNING",
-        "home_page_waiting"
-      );
-      return;
-    }
+  const workflowOrchestrator = new WorkflowOrchestrator();
 
-    logInfo("🏠 On home page");
+  // ============= LEGACY COMPATIBILITY FUNCTIONS =============
 
-    try {
-      // Wait 2-4 seconds as requested
-      const waitTime = Math.random() * 2000 + 2000; // 2-4 seconds
-      await sleep(waitTime);
-
-      // Navigate to earn page
-      logInfo("Redirecting to earn page");
-      window.location.href = "https://dash.ateex.cloud/earn";
-    } catch (error) {
-      logError("Error in handleHomePage: " + error.message);
-    }
-  }
-
-  // Handle logout page
-  async function handleLogoutPage() {
-    logInfo("🔓 On logout page, clearing data and redirecting to login");
-    await data.clearBrowserData();
-    setTimeout(() => {
-      window.location.href = "https://dash.ateex.cloud/login";
-    }, 1000);
-  }
-
-  // Handle popup/ads pages
-  function handlePopupPage() {
-    logInfo("📺 Detected ads/popup page, will auto-close");
-    setTimeout(() => {
-      logInfo("Auto-closing ads page");
-      window.close();
-    }, Math.random() * 5000 + 8000); // 8-13 seconds
-  }
-
-  // ============= MAIN WORKFLOW ORCHESTRATOR =============
-
+  // Main start function (legacy compatibility)
   async function start() {
-    const currentPath = window.location.pathname;
-    const currentUrl = window.location.href;
+    return await workflowOrchestrator.start();
+  }
 
-    // Handle reCAPTCHA iframe separately - NO UI creation
-    if (currentUrl.includes("recaptcha")) {
-      logInfo("🔄 Detected reCAPTCHA iframe");
+  // Legacy page handlers (now delegated to navigation handler)
+  async function handleEarnPage() {
+    errorManager.logInfo("Workflow", "Delegating to navigation handler...");
+    const page = { type: "earn" };
+    return await navigationHandler.handlePageNavigation(page);
+  }
 
-      // Listen for credentials ready message from parent (with spam prevention)
-      let lastCredentialsMessage = 0;
-      window.addEventListener("message", function (event) {
-        if (event.data && event.data.type === "ateex_credentials_ready") {
-          const now = Date.now();
-          // Only log once every 60 seconds to prevent spam
-          if (now - lastCredentialsMessage > 60000) {
-            core.logWithSpamControl(
-              "Received credentials ready message from parent window",
-              "INFO",
-              "credentials_ready_message"
-            );
-            lastCredentialsMessage = now;
-          }
-          core.state.credentialsReady = true;
-        }
+  async function handleLoginPage() {
+    errorManager.logInfo("Workflow", "Delegating to navigation handler...");
+    const page = { type: "login" };
+    return await navigationHandler.handlePageNavigation(page);
+  }
+
+  async function handleHomePage() {
+    errorManager.logInfo("Workflow", "Delegating to navigation handler...");
+    const page = { type: "home" };
+    return await navigationHandler.handlePageNavigation(page);
+  }
+
+  async function handleLogoutPage() {
+    errorManager.logInfo("Workflow", "Delegating to navigation handler...");
+    const page = { type: "logout" };
+    return await navigationHandler.handlePageNavigation(page);
+  }
+
+  function handlePopupPage() {
+    errorManager.logInfo("Workflow", "Delegating to navigation handler...");
+    const page = { type: "popup" };
+    return navigationHandler.handlePageNavigation(page);
+  }
+
+  // Legacy captcha functions
+  function setupCaptchaFallbackDetection() {
+    errorManager.logInfo(
+      "Workflow",
+      "ℹ️ Fallback detection now handled by enhanced recaptcha module"
+    );
+  }
+
+  async function attemptFormSubmission() {
+    errorManager.logInfo(
+      "Workflow",
+      "ℹ️ Form submission now handled by login handler module"
+    );
+    if (AteexModules.loginHandler) {
+      return await AteexModules.loginHandler.attemptFormSubmission();
+    }
+  }
+
+  // ============= ENHANCED FEATURES =============
+
+  // Get comprehensive system status
+  function getSystemStatus() {
+    return {
+      workflow: workflowOrchestrator.getStatus(),
+      navigation: {
+        ready: navigationHandler.isReady(),
+        currentPage: navigationHandler.getCurrentPage(),
+      },
+      stats: {
+        active: statsManager.isAutoStatsActive(),
+        metrics: statsManager.getPerformanceMetrics(),
+        displayStats: statsManager.getDisplayStats(),
+      },
+      ui: {
+        counterVisible: !!document.getElementById("ateex-counter"),
+        notificationCount: uiManager.notifications?.size || 0,
+      },
+    };
+  }
+
+  // Initialize and start the system
+  async function initializeAndStart() {
+    try {
+      await workflowOrchestrator.initialize();
+      await workflowOrchestrator.start();
+
+      // Show system status
+      const status = getSystemStatus();
+      errorManager.logSuccess("Workflow", "🎉 System fully operational!");
+      errorManager.logInfo(
+        "Workflow",
+        `📊 System Status: ${JSON.stringify(status, null, 2)}`
+      );
+
+      return true;
+    } catch (error) {
+      errorManager.handleError(error, {
+        context: "initialize_and_start",
+        category: "workflow",
       });
-
-      recaptcha.initCaptchaSolver();
-      return; // Only handle captcha, nothing else
+      return false;
     }
+  }
 
-    // Initialize UI for main pages only (credentials will be handled per page)
-    if (window.top === window.self) {
-      // Check auto stats state first (backward compatibility + new flow)
-      const autoStatsWasEnabled = core.checkAutoStatsState();
+  // Emergency stop function
+  function emergencyStop() {
+    try {
+      // Set global stop flag
+      window.scriptStopped = true;
 
-      // Check if credentials already exist and set flag
-      const existingCreds = credentials.loadCredentials();
-      if (existingCreds && existingCreds.email && existingCreds.password) {
-        CONFIG = existingCreds;
-        core.state.credentialsReady = true;
-        logSuccess("Existing credentials found and loaded");
+      // Stop workflow
+      workflowOrchestrator.stop();
 
-        // Notify iframes that credentials are ready
-        setTimeout(() => {
-          try {
-            const message = {
-              type: "ateex_credentials_ready",
-              timestamp: Date.now(),
-            };
-
-            const frames = document.querySelectorAll("iframe");
-            if (frames.length > 0) {
-              frames.forEach(frame => {
-                try {
-                  frame.contentWindow.postMessage(message, "*");
-                } catch (e) {
-                  // Ignore cross-origin errors
-                }
-              });
-            }
-          } catch (e) {
-            logError(
-              "Error sending existing credentials message: " + e.message
-            );
-          }
-        }, 1000); // Wait 1 second for iframes to load
-
-        // Send message to new iframes when they appear (less frequent)
-        let lastIframeCount = 0;
-        setInterval(() => {
-          if (core.state.credentialsReady) {
-            const frames = document.querySelectorAll("iframe");
-            // Only send if new iframes appeared
-            if (frames.length > lastIframeCount) {
-              try {
-                const message = {
-                  type: "ateex_credentials_ready",
-                  timestamp: Date.now(),
-                };
-
-                frames.forEach(frame => {
-                  try {
-                    frame.contentWindow.postMessage(message, "*");
-                  } catch (e) {
-                    // Ignore cross-origin errors
-                  }
-                });
-              } catch (e) {
-                // Ignore errors
-              }
-            }
-            lastIframeCount = frames.length;
-          }
-        }, 5000); // Check every 5 seconds instead of 3
+      // Show notification
+      if (uiManager.showNotification) {
+        uiManager.showNotification(
+          "🛑 Emergency stop activated",
+          "warning",
+          10000
+        );
       }
 
-      // Load data first, then create UI with current data (only if auto stats enabled)
-      data.loadSavedStats();
-
-      // Only create UI and start operations if auto stats is enabled
-      if (core.state.autoStatsEnabled) {
-        ui.createCounterUI();
-        // Force immediate update to show loaded data
-        ui.updateCounter();
-        logSuccess("🚀 Auto Stats runtime active - UI created");
-      } else {
-        // For new users, immediately prompt for credentials
-        setTimeout(async () => {
-          try {
-            logInfo("🔐 Setting up credentials...");
-            const newCredentials = await credentials.getCredentials();
-
-            if (newCredentials) {
-              CONFIG = newCredentials;
-              core.state.credentialsReady = true;
-              logSuccess("✅ Credentials obtained - Auto Stats enabled");
-
-              // Notify iframes that credentials are ready
-              const message = {
-                type: "ateex_credentials_ready",
-                timestamp: Date.now(),
-              };
-
-              const frames = document.querySelectorAll("iframe");
-              frames.forEach(frame => {
-                try {
-                  frame.contentWindow.postMessage(message, "*");
-                } catch (e) {
-                  // Ignore cross-origin errors
-                }
-              });
-
-              // Create UI now that setup is complete
-              ui.createCounterUI();
-              ui.updateCounter();
-            } else {
-              logWarning(
-                "❌ User cancelled credential setup - Auto Stats remains disabled"
-              );
-            }
-          } catch (e) {
-            logError("Error during credential setup: " + e.message);
-          }
-        }, 2000); // Wait 2 seconds for page to fully load
-      }
-
-      // Update counter more frequently for better UX
-      setInterval(ui.updateCounter, 2000); // Update every 2 seconds instead of 10
+      errorManager.logWarning(
+        "Workflow",
+        "🛑 Emergency stop activated by user"
+      );
+    } catch (error) {
+      console.error("Error during emergency stop:", error);
     }
+  }
 
-    // Handle popup ads pages (auto-close)
-    if (
-      currentUrl.includes("clickcoin") ||
-      currentUrl.includes("ads") ||
-      currentUrl.includes("popup") ||
-      currentPath.includes("/earn/clickcoin")
-    ) {
-      handlePopupPage();
-      return;
-    }
+  // Restart system
+  async function restart() {
+    try {
+      errorManager.logInfo("Workflow", "🔄 Restarting system...");
 
-    // Handle main pages
-    if (currentPath.includes("/earn")) {
-      // Always try to handle earn page (it has its own guards)
-      handleEarnPage();
-    } else if (currentPath.includes("/login")) {
-      // Always try to handle login page (it has its own guards)
-      handleLoginPage();
-    } else if (currentPath.includes("/logout")) {
-      // Handle logout page - clear data and redirect to login
-      handleLogoutPage();
-    } else if (currentPath.includes("/home") || currentPath === "/") {
-      // Always try to handle home page (it has its own guards)
-      handleHomePage();
+      // Stop current workflow
+      workflowOrchestrator.stop();
+
+      // Wait briefly
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Clear stop flag
+      window.scriptStopped = false;
+
+      // Restart
+      return await initializeAndStart();
+    } catch (error) {
+      errorManager.handleError(error, {
+        context: "restart_system",
+        category: "workflow",
+      });
+      return false;
     }
-    // Removed unknown page log to reduce spam
   }
 
   // ============= EXPORTS =============
 
+  // Main orchestrator
+  exports.WorkflowOrchestrator = WorkflowOrchestrator;
+  exports.workflowOrchestrator = workflowOrchestrator;
+
+  // Primary API
   exports.start = start;
+  exports.initialize = () => workflowOrchestrator.initialize();
+  exports.stop = () => workflowOrchestrator.stop();
+  exports.getStatus = () => workflowOrchestrator.getStatus();
+
+  // Legacy compatibility
   exports.handleEarnPage = handleEarnPage;
   exports.handleLoginPage = handleLoginPage;
   exports.handleHomePage = handleHomePage;
   exports.handleLogoutPage = handleLogoutPage;
   exports.handlePopupPage = handlePopupPage;
-  exports.CONFIG = CONFIG;
+  exports.setupCaptchaFallbackDetection = setupCaptchaFallbackDetection;
+  exports.attemptFormSubmission = attemptFormSubmission;
+
+  // Enhanced features
+  exports.getSystemStatus = getSystemStatus;
+  exports.initializeAndStart = initializeAndStart;
+  exports.emergencyStop = emergencyStop;
+  exports.restart = restart;
+
+  // Legacy CONFIG support (deprecated)
+  exports.CONFIG = null; // Will be handled by credentials module
 })(exports);
