@@ -822,7 +822,6 @@
   exports.updateCounter = updateCounter;
   exports.showModal = showModal;
   exports.showTargetConfigPopup = showTargetConfigPopup;
-  exports.showStatsHistoryPopup = showStatsHistoryPopup;
   exports.showSettingsDropdown = showSettingsDropdown;
   exports.SettingsManager = SettingsManager;
   exports.logout = logout;
