@@ -195,16 +195,41 @@
     const requestStart = Date.now();
 
     try {
-      // Use proxy.makeProxyRequest thay vì GM_xmlhttpRequest trực tiếp
-      const response = await proxy.makeProxyRequest({
-        method: "POST",
-        url: url,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        data: "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
-        timeout: 60000,
-      });
+      // Try proxy request first, with fallback to direct
+      let response;
+      try {
+        response = await proxy.makeProxyRequest({
+          method: "POST",
+          url: url,
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          data:
+            "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
+          timeout: 60000,
+        });
+      } catch (proxyError) {
+        logWarning(
+          `Proxy request failed, trying direct: ${proxyError.message}`
+        );
+
+        // Fallback to direct request
+        response = await new Promise((resolve, reject) => {
+          GM_xmlhttpRequest({
+            method: "POST",
+            url: url,
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data:
+              "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
+            timeout: 60000,
+            onload: resolve,
+            onerror: reject,
+            ontimeout: () => reject(new Error("Direct request timeout")),
+          });
+        });
+      }
 
       const responseTime = Date.now() - requestStart;
 
@@ -281,16 +306,39 @@
     var start = new Date().getTime();
 
     try {
-      // Use proxy.makeProxyRequest cho ping test cũng
-      const response = await proxy.makeProxyRequest({
-        method: "GET",
-        url: url,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        data: "",
-        timeout: 8000,
-      });
+      // Try proxy request first, with fallback to direct
+      let response;
+      try {
+        response = await proxy.makeProxyRequest({
+          method: "GET",
+          url: url,
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          data: "",
+          timeout: 8000,
+        });
+      } catch (proxyError) {
+        logWarning(
+          `Ping test proxy failed, trying direct: ${proxyError.message}`
+        );
+
+        // Fallback to direct request
+        response = await new Promise((resolve, reject) => {
+          GM_xmlhttpRequest({
+            method: "GET",
+            url: url,
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data: "",
+            timeout: 8000,
+            onload: resolve,
+            onerror: reject,
+            ontimeout: () => reject(new Error("Direct ping timeout")),
+          });
+        });
+      }
 
       var end = new Date().getTime();
       var milliseconds = end - start;

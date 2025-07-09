@@ -124,6 +124,10 @@
   let lastUsedProxyIndex = -1;
   let proxyEnabled = false; // Default disabled to avoid initial overhead
 
+  // Track HTTP 405 errors to auto-disable proxy if too many
+  let http405Count = 0;
+  const MAX_405_ERRORS = 5; // Auto-disable after 5 consecutive 405 errors
+
   // Check if proxy is enabled
   function isProxyEnabled() {
     try {
@@ -188,14 +192,23 @@
     for (const proxy of subsetToTest) {
       try {
         const startTime = Date.now();
-        const response = await new Promise((resolve, reject) => {
-          const proxyConfig = getProxyConfig(proxy);
 
+        // Try direct test first to avoid proxy recursion
+        const response = await new Promise((resolve, reject) => {
+          // Test proxy without using proxy system to avoid recursion
           GM_xmlhttpRequest({
             method: "GET",
             url: testUrl,
             timeout: 8000, // Shorter timeout for quick test
-            ...proxyConfig,
+            proxy: `http://${
+              proxy.username && proxy.password
+                ? `${proxy.username}:${proxy.password}@`
+                : ""
+            }${proxy.host}:${proxy.port}`,
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
             onload: resolve,
             onerror: reject,
             ontimeout: () => reject(new Error("Timeout")),
@@ -212,9 +225,17 @@
           );
         } else {
           updateProxyStats(proxy.proxy, false, responseTime);
+          logWarning(
+            `⚠️ Quick test failed: ${proxy.proxy} - HTTP ${response.status}`
+          );
         }
       } catch (error) {
         updateProxyStats(proxy.proxy, false, 8000);
+        logWarning(
+          `❌ Quick test error: ${proxy.proxy} - ${
+            error.message || "Unknown error"
+          }`
+        );
       }
 
       // Small delay to avoid overwhelming
@@ -455,22 +476,27 @@
   function getProxyConfig(proxy) {
     if (!proxy) return null;
 
-    // Tampermonkey proxy format cần full URL với authentication
-    let proxyUrl;
-
+    // Different proxy formats for compatibility
     if (proxy.username && proxy.password) {
-      // Format: "http://username:password@host:port"
-      proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.host}:${proxy.port}`;
+      // Format with authentication - try multiple formats
+      return {
+        proxy: `http://${proxy.username}:${proxy.password}@${proxy.host}:${proxy.port}`,
+        // Alternative formats for different proxy types
+        proxyType: "http",
+        proxyHost: proxy.host,
+        proxyPort: proxy.port,
+        proxyUsername: proxy.username,
+        proxyPassword: proxy.password,
+      };
     } else {
-      // Format: "http://host:port"
-      proxyUrl = `http://${proxy.host}:${proxy.port}`;
+      // Format without authentication
+      return {
+        proxy: `http://${proxy.host}:${proxy.port}`,
+        proxyType: "http",
+        proxyHost: proxy.host,
+        proxyPort: proxy.port,
+      };
     }
-
-    logDebug(`Proxy config: ${proxyUrl.replace(/:([^:]+)@/, ":***@")}`); // Hide password in logs
-
-    return {
-      proxy: proxyUrl,
-    };
   }
 
   // ============= PROXY REQUEST WRAPPER =============
@@ -480,7 +506,7 @@
     return new Promise((resolve, reject) => {
       // Check if proxy is disabled, fallback to direct request
       if (!isProxyEnabled()) {
-        logInfo("🚫 Proxy disabled, making direct request");
+        logDebug("🚫 Proxy disabled, making direct request");
         GM_xmlhttpRequest({
           ...options,
           onload: resolve,
@@ -550,19 +576,93 @@
           `🔄 Proxy attempt ${attempt}/${MAX_PROXY_RETRIES}: ${selectedProxy.proxy}`
         );
 
-        // Merge proxy config vào request options
+        // Create enhanced request options with better proxy support
         const requestOptions = {
           ...options,
           timeout: PROXY_TIMEOUT,
+          headers: {
+            ...options.headers,
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+          },
           onload: function (response) {
             const responseTime = Date.now() - requestStart;
 
             if (response.status === 200) {
+              // Reset 405 counter on successful request
+              http405Count = 0;
               updateProxyStats(selectedProxy.proxy, true, responseTime);
               logSuccess(
                 `✅ Proxy success: ${selectedProxy.proxy} (${responseTime}ms)`
               );
               resolve(response);
+            } else if (response.status === 405) {
+              // Method not allowed - track 405 errors
+              http405Count++;
+              updateProxyStats(selectedProxy.proxy, false, responseTime);
+              logWarning(
+                `⚠️ Proxy HTTP 405: ${selectedProxy.proxy} (${http405Count}/${MAX_405_ERRORS}) - trying alternative method`
+              );
+
+              // Auto-disable proxy if too many 405 errors
+              if (http405Count >= MAX_405_ERRORS) {
+                logError(
+                  `❌ Too many HTTP 405 errors (${http405Count}), auto-disabling proxy system`
+                );
+                setProxyEnabled(false);
+
+                // Fallback to direct request immediately
+                GM_xmlhttpRequest({
+                  ...options,
+                  onload: function (directResponse) {
+                    logWarning(
+                      "✅ Fallback to direct request after auto-disable"
+                    );
+                    resolve(directResponse);
+                  },
+                  onerror: function (error) {
+                    logError(
+                      `❌ Direct request after auto-disable failed: ${
+                        error.message || "Unknown"
+                      }`
+                    );
+                    reject(
+                      new Error("Proxy auto-disabled and direct request failed")
+                    );
+                  },
+                  ontimeout: function () {
+                    logError("❌ Direct request timeout after auto-disable");
+                    reject(
+                      new Error(
+                        "Proxy auto-disabled and direct request timeout"
+                      )
+                    );
+                  },
+                });
+                return;
+              }
+
+              // Try GET request if POST failed due to 405
+              if (options.method === "POST") {
+                const getOptions = {
+                  ...requestOptions,
+                  method: "GET",
+                  data: undefined, // Remove POST data for GET
+                  url: options.data
+                    ? `${options.url}?${options.data}`
+                    : options.url,
+                };
+
+                GM_xmlhttpRequest(getOptions);
+                return;
+              }
+
+              // If it's already GET or other method, exclude and retry
+              excludedProxies.push(selectedProxy.proxy);
+              setTimeout(attemptRequest, 1000);
             } else {
               updateProxyStats(selectedProxy.proxy, false, responseTime);
               logWarning(
@@ -605,13 +705,41 @@
           },
         };
 
-        // Apply proxy config nếu có
+        // Apply proxy config with fallback attempts
         if (proxyConfig) {
-          Object.assign(requestOptions, proxyConfig);
+          // Try primary proxy format first
+          Object.assign(requestOptions, {
+            proxy: proxyConfig.proxy,
+          });
+
+          // Log proxy attempt with detailed info
+          logDebug(
+            `🔗 Proxy request details:
+- Proxy: ${selectedProxy.proxy}
+- Method: ${options.method || "GET"}
+- URL: ${options.url}
+- Has Auth: ${!!(selectedProxy.username && selectedProxy.password)}
+- Proxy URL: ${proxyConfig.proxy.replace(/:([^:@]+)@/, ":***@")}`
+          );
         }
 
         // Make request với proxy
-        GM_xmlhttpRequest(requestOptions);
+        try {
+          GM_xmlhttpRequest(requestOptions);
+        } catch (error) {
+          logWarning(
+            `Request setup error with proxy ${selectedProxy.proxy}: ${error.message}`
+          );
+
+          // Fallback to direct request for this attempt
+          updateProxyStats(
+            selectedProxy.proxy,
+            false,
+            Date.now() - requestStart
+          );
+          excludedProxies.push(selectedProxy.proxy);
+          setTimeout(attemptRequest, 1000);
+        }
       }
 
       // Start first attempt
@@ -761,13 +889,20 @@
 
         const startTime = Date.now();
         const response = await new Promise((resolve, reject) => {
-          const proxyConfig = getProxyConfig(proxy);
-
+          // Direct proxy test without using proxy system to avoid recursion
           GM_xmlhttpRequest({
             method: "GET",
             url: testUrl,
             timeout: 10000, // 10 second timeout for tests
-            ...proxyConfig,
+            proxy: `http://${
+              proxy.username && proxy.password
+                ? `${proxy.username}:${proxy.password}@`
+                : ""
+            }${proxy.host}:${proxy.port}`,
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
             onload: resolve,
             onerror: reject,
             ontimeout: () => reject(new Error("Timeout")),
