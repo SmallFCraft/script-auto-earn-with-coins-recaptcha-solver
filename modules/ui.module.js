@@ -28,6 +28,11 @@
       label: "View Stats",
       description: "View current statistics",
     },
+    "proxy-stats": {
+      icon: "🔒",
+      label: "Proxy Status",
+      description: "View proxy statistics and test connections",
+    },
     "reset-stats": {
       icon: "🔄",
       label: "Reset Stats",
@@ -377,6 +382,9 @@
         case "view-stats":
           this.showStats();
           break;
+        case "proxy-stats":
+          this.showProxyStats();
+          break;
         case "reset-stats":
           this.resetStats();
           break;
@@ -388,6 +396,96 @@
 
     showStats: function () {
       showSimpleStats();
+    },
+
+    showProxyStats: function () {
+      if (!AteexModules.proxy) {
+        showModal(
+          "🔒 Proxy Status",
+          `<div style="text-align: center; color: #ff6b6b;">Proxy module not available</div>`,
+          [{ label: "Close", callback: null }]
+        );
+        return;
+      }
+
+      const proxyStats = AteexModules.proxy.getProxyStatsSummary();
+      const proxyList = AteexModules.proxy.getProxyList();
+
+      showModal(
+        "🔒 Proxy Status",
+        `
+          <div style="font-size: 14px;">
+            <div style="margin-bottom: 15px; text-align: center;">
+              <div style="margin-bottom: 8px;">
+                <span style="color: #4CAF50;">Total Proxies:</span> ${proxyList.length}
+              </div>
+              <div style="margin-bottom: 8px;">
+                <span style="color: #FFD700;">Working:</span> ${proxyStats.workingProxies} / ${proxyStats.totalProxies}
+              </div>
+              <div style="margin-bottom: 8px;">
+                <span style="color: #FF9800;">Average Response:</span> ${proxyStats.averageResponseTime}ms
+              </div>
+              <div style="margin-bottom: 8px;">
+                <span style="color: #2196F3;">Total Requests:</span> ${proxyStats.totalRequests}
+              </div>
+            </div>
+            <div style="font-size: 12px; opacity: 0.8; text-align: center;">
+              Proxies automatically rotate for anti-detection
+            </div>
+          </div>
+        `,
+        [
+          {
+            label: "Test All Proxies",
+            callback: async () => {
+              showModal(
+                "🔄 Testing Proxies",
+                `<div style="text-align: center;">Testing all proxies, please wait...</div>`,
+                []
+              );
+
+              try {
+                const results = await AteexModules.proxy.testAllProxies();
+                const workingCount = results.filter(r => r.success).length;
+
+                let resultHtml = `
+                  <div style="margin-bottom: 15px; text-align: center;">
+                    <strong>Test Results: ${workingCount}/${results.length} working</strong>
+                  </div>
+                  <div style="max-height: 300px; overflow-y: auto; font-size: 12px;">
+                `;
+
+                results.forEach(result => {
+                  const status = result.success ? "✅" : "❌";
+                  const time = result.responseTime
+                    ? `${result.responseTime}ms`
+                    : "N/A";
+                  const error = result.error ? ` (${result.error})` : "";
+
+                  resultHtml += `
+                    <div style="margin-bottom: 5px; padding: 5px; background: rgba(255,255,255,0.1); border-radius: 3px;">
+                      ${status} ${result.proxy} - ${time}${error}
+                    </div>
+                  `;
+                });
+
+                resultHtml += "</div>";
+
+                showModal("🔒 Proxy Test Results", resultHtml, [
+                  { label: "Close", callback: null },
+                ]);
+              } catch (e) {
+                showModal(
+                  "❌ Test Failed",
+                  `<div style="text-align: center; color: #ff6b6b;">Error testing proxies: ${e.message}</div>`,
+                  [{ label: "Close", callback: null }]
+                );
+              }
+            },
+          },
+          { label: "Close", callback: null },
+        ]
+      );
     },
 
     resetStats: function () {
@@ -509,6 +607,7 @@
             <div id="eta-target" style="margin-top: 5px; font-size: 11px;">ETA Target: --</div>
             <div id="next-clear" style="margin-top: 3px; font-size: 10px; opacity: 0.8;">Next clear: --</div>
             <div id="best-server" style="margin-top: 3px; font-size: 10px; opacity: 0.8;">Server: --</div>
+            <div id="proxy-status" style="margin-top: 3px; font-size: 10px; opacity: 0.8;">🔒 Proxy: --</div>
             <div style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px;">
                 <div style="display: flex; gap: 8px;">
                     <button id="set-target-btn" style="${
@@ -798,6 +897,46 @@
         document.getElementById(
           "best-server"
         ).textContent = `🌐 Server: checking...`;
+      }
+    }
+
+    // Update proxy info
+    if (
+      !window.lastProxyUpdate ||
+      Date.now() - window.lastProxyUpdate > 20000
+    ) {
+      try {
+        if (AteexModules.proxy && AteexModules.proxy.getProxyStatsSummary) {
+          const proxyStats = AteexModules.proxy.getProxyStatsSummary();
+          const proxyElement = document.getElementById("proxy-status");
+
+          if (proxyElement) {
+            if (proxyStats.totalProxies > 0) {
+              const workingCount = proxyStats.workingProxies;
+              const totalCount = proxyStats.totalProxies;
+              const avgTime = proxyStats.averageResponseTime;
+
+              if (workingCount > 0) {
+                proxyElement.textContent = `🔒 Proxy: ${workingCount}/${totalCount} (${avgTime}ms)`;
+              } else {
+                proxyElement.textContent = `🔒 Proxy: ${totalCount} available`;
+              }
+            } else {
+              proxyElement.textContent = `🔒 Proxy: loading...`;
+            }
+            window.lastProxyUpdate = Date.now();
+          }
+        } else {
+          const proxyElement = document.getElementById("proxy-status");
+          if (proxyElement) {
+            proxyElement.textContent = `🔒 Proxy: initializing...`;
+          }
+        }
+      } catch (e) {
+        const proxyElement = document.getElementById("proxy-status");
+        if (proxyElement) {
+          proxyElement.textContent = `🔒 Proxy: error`;
+        }
       }
     }
   }

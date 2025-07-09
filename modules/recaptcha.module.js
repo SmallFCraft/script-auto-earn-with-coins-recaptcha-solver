@@ -9,13 +9,17 @@
   // Get dependencies with validation
   const core = AteexModules.core;
   const data = AteexModules.data;
-  
+  const proxy = AteexModules.proxy;
+
   // Validate dependencies before use
   if (!core) {
     throw new Error("Core module not loaded - missing dependency");
   }
   if (!data) {
     throw new Error("Data module not loaded - missing dependency");
+  }
+  if (!proxy) {
+    throw new Error("Proxy module not loaded - missing dependency");
   }
   const {
     log,
@@ -184,80 +188,143 @@
       recaptchaLanguage = "en-US";
     }
 
-    logInfo(`Solving reCAPTCHA with audio using server: ${url}`);
+    logInfo(
+      `Solving reCAPTCHA with audio using server: ${url} (with proxy rotation)`
+    );
 
     const requestStart = Date.now();
 
-    GM_xmlhttpRequest({
-      method: "POST",
-      url: url,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      data: "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
-      timeout: 60000,
-      onload: function (response) {
-        const responseTime = Date.now() - requestStart;
+    try {
+      // Use proxy system for enhanced anti-detection
+      const response = await proxy.makeProxyRequest(
+        {
+          method: "POST",
+          url: url,
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Accept: "text/plain, */*; q=0.01",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          data:
+            "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
+          timeout: 60000,
+        },
+        3
+      ); // Max 3 proxy attempts
 
-        try {
-          if (response && response.responseText) {
-            var responseText = response.responseText;
-            // Validate Response for error messages or html elements
-            if (
-              responseText == "0" ||
-              responseText.includes("<") ||
-              responseText.includes(">") ||
-              responseText.length < 2 ||
-              responseText.length > 50
-            ) {
-              // Invalid Response, Reload the captcha
-              core.logWithSpamControl(
-                "Invalid Response. Retrying..",
-                "WARNING",
-                "invalid_response"
-              );
-              data.updateServerStats(url, false, responseTime);
-            } else if (
-              qSelector(AUDIO_SOURCE) &&
-              qSelector(AUDIO_SOURCE).src &&
-              audioUrl == qSelector(AUDIO_SOURCE).src &&
-              qSelector(AUDIO_RESPONSE) &&
-              !qSelector(AUDIO_RESPONSE).value &&
-              qSelector(AUDIO_BUTTON).style.display == "none" &&
-              qSelector(VERIFY_BUTTON)
-            ) {
-              qSelector(AUDIO_RESPONSE).value = responseText;
-              qSelector(VERIFY_BUTTON).click();
-              logSuccess("reCAPTCHA solved successfully!");
-              data.updateServerStats(url, true, responseTime);
-            } else {
-              core.logWithSpamControl(
-                "Could not locate text input box",
-                "WARNING",
-                "input_box_error"
-              );
-              data.updateServerStats(url, false, responseTime);
-            }
-            waitingForAudioResponse = false;
+      const responseTime = Date.now() - requestStart;
+
+      try {
+        if (response && response.responseText) {
+          var responseText = response.responseText;
+          // Validate Response for error messages or html elements
+          if (
+            responseText == "0" ||
+            responseText.includes("<") ||
+            responseText.includes(">") ||
+            responseText.length < 2 ||
+            responseText.length > 50
+          ) {
+            // Invalid Response, Reload the captcha
+            core.logWithSpamControl(
+              "Invalid Response. Retrying..",
+              "WARNING",
+              "invalid_response"
+            );
+            data.updateServerStats(url, false, responseTime);
+          } else if (
+            qSelector(AUDIO_SOURCE) &&
+            qSelector(AUDIO_SOURCE).src &&
+            audioUrl == qSelector(AUDIO_SOURCE).src &&
+            qSelector(AUDIO_RESPONSE) &&
+            !qSelector(AUDIO_RESPONSE).value &&
+            qSelector(AUDIO_BUTTON).style.display == "none" &&
+            qSelector(VERIFY_BUTTON)
+          ) {
+            qSelector(AUDIO_RESPONSE).value = responseText;
+            qSelector(VERIFY_BUTTON).click();
+            logSuccess("reCAPTCHA solved successfully via proxy!");
+            data.updateServerStats(url, true, responseTime);
+          } else {
+            core.logWithSpamControl(
+              "Could not locate text input box",
+              "WARNING",
+              "input_box_error"
+            );
+            data.updateServerStats(url, false, responseTime);
           }
-        } catch (err) {
-          logError("Exception handling response. Retrying..: " + err.message);
-          data.updateServerStats(url, false, responseTime);
           waitingForAudioResponse = false;
         }
-      },
-      onerror: function (e) {
-        const responseTime = Date.now() - requestStart;
-        logError(`reCAPTCHA solver error from ${url}: ${e}`);
+      } catch (err) {
+        logError("Exception handling response. Retrying..: " + err.message);
         data.updateServerStats(url, false, responseTime);
         waitingForAudioResponse = false;
-      },
-      ontimeout: function () {
-        logWarning(`Response Timed out from ${url}. Retrying..`);
-        data.updateServerStats(url, false, 60000); // Use timeout value
-        waitingForAudioResponse = false;
-      },
-    });
+      }
+    } catch (error) {
+      const responseTime = Date.now() - requestStart;
+      logError(`reCAPTCHA solver failed with proxy rotation: ${error.message}`);
+      data.updateServerStats(url, false, responseTime);
+      waitingForAudioResponse = false;
+
+      // Fallback to direct connection if proxy fails
+      logWarning("Falling back to direct connection...");
+
+      GM_xmlhttpRequest({
+        method: "POST",
+        url: url,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+        data: "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
+        timeout: 60000,
+        onload: function (response) {
+          const responseTime = Date.now() - requestStart;
+
+          try {
+            if (response && response.responseText) {
+              var responseText = response.responseText;
+              if (
+                responseText != "0" &&
+                !responseText.includes("<") &&
+                !responseText.includes(">") &&
+                responseText.length >= 2 &&
+                responseText.length <= 50 &&
+                qSelector(AUDIO_RESPONSE) &&
+                !qSelector(AUDIO_RESPONSE).value
+              ) {
+                qSelector(AUDIO_RESPONSE).value = responseText;
+                qSelector(VERIFY_BUTTON).click();
+                logSuccess("reCAPTCHA solved via fallback connection!");
+                data.updateServerStats(url, true, responseTime);
+              } else {
+                data.updateServerStats(url, false, responseTime);
+              }
+              waitingForAudioResponse = false;
+            }
+          } catch (err) {
+            logError("Fallback request error: " + err.message);
+            data.updateServerStats(url, false, responseTime);
+            waitingForAudioResponse = false;
+          }
+        },
+        onerror: function (e) {
+          const responseTime = Date.now() - requestStart;
+          logError(`Fallback request failed: ${e}`);
+          data.updateServerStats(url, false, responseTime);
+          waitingForAudioResponse = false;
+        },
+        ontimeout: function () {
+          logWarning(`Fallback request timed out`);
+          data.updateServerStats(url, false, 60000);
+          waitingForAudioResponse = false;
+        },
+      });
+    }
   }
 
   // ============= SERVER PING TESTING =============
@@ -265,55 +332,116 @@
   async function pingTest(url) {
     var start = new Date().getTime();
 
-    GM_xmlhttpRequest({
-      method: "GET",
-      url: url,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      data: "",
-      timeout: 8000,
-      onload: function (response) {
-        var end = new Date().getTime();
-        var milliseconds = end - start;
+    try {
+      // Use proxy for ping test to avoid detection
+      const response = await proxy.makeProxyRequest(
+        {
+          method: "GET",
+          url: url,
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+          data: "",
+          timeout: 8000,
+        },
+        2
+      ); // Max 2 proxy attempts for ping
 
-        if (response && response.responseText && response.responseText == "0") {
-          // Update latency list
-          for (let i = 0; i < serversList.length; i++) {
-            if (url == serversList[i]) {
-              latencyList[i] = milliseconds;
-            }
+      var end = new Date().getTime();
+      var milliseconds = end - start;
+
+      if (response && response.responseText && response.responseText == "0") {
+        // Update latency list
+        for (let i = 0; i < serversList.length; i++) {
+          if (url == serversList[i]) {
+            latencyList[i] = milliseconds;
           }
-
-          // Update server stats
-          data.updateServerStats(url, true, milliseconds);
-        } else {
-          core.logWithSpamControl(
-            `Server ${url} ping failed: invalid response`,
-            "WARNING",
-            "ping_failed"
-          );
-          data.updateServerStats(url, false, milliseconds);
         }
 
-        // Save latency cache after all pings complete
-        data.saveServerLatency(latencyList);
-      },
-      onerror: function (e) {
-        var end = new Date().getTime();
-        var milliseconds = end - start;
-        logError(`Ping test error for ${url}: ${e}`);
-        data.updateServerStats(url, false, milliseconds);
-      },
-      ontimeout: function () {
+        // Update server stats
+        data.updateServerStats(url, true, milliseconds);
+        logInfo(`Ping test successful for ${url} via proxy: ${milliseconds}ms`);
+      } else {
         core.logWithSpamControl(
-          `Ping Test Response Timed out for ${url}`,
+          `Server ${url} ping failed: invalid response via proxy`,
           "WARNING",
-          "ping_timeout"
+          "ping_failed"
         );
-        data.updateServerStats(url, false, 8000); // Use timeout value
-      },
-    });
+        data.updateServerStats(url, false, milliseconds);
+      }
+
+      // Save latency cache after all pings complete
+      data.saveServerLatency(latencyList);
+    } catch (error) {
+      var end = new Date().getTime();
+      var milliseconds = end - start;
+
+      logWarning(
+        `Proxy ping failed for ${url}, trying direct connection: ${error.message}`
+      );
+
+      // Fallback to direct connection
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: url,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        data: "",
+        timeout: 8000,
+        onload: function (response) {
+          var end = new Date().getTime();
+          var milliseconds = end - start;
+
+          if (
+            response &&
+            response.responseText &&
+            response.responseText == "0"
+          ) {
+            // Update latency list
+            for (let i = 0; i < serversList.length; i++) {
+              if (url == serversList[i]) {
+                latencyList[i] = milliseconds;
+              }
+            }
+
+            // Update server stats
+            data.updateServerStats(url, true, milliseconds);
+            logInfo(
+              `Ping test successful for ${url} via direct connection: ${milliseconds}ms`
+            );
+          } else {
+            core.logWithSpamControl(
+              `Server ${url} ping failed: invalid response`,
+              "WARNING",
+              "ping_failed"
+            );
+            data.updateServerStats(url, false, milliseconds);
+          }
+
+          // Save latency cache after all pings complete
+          data.saveServerLatency(latencyList);
+        },
+        onerror: function (e) {
+          var end = new Date().getTime();
+          var milliseconds = end - start;
+          logError(`Ping test error for ${url}: ${e}`);
+          data.updateServerStats(url, false, milliseconds);
+        },
+        ontimeout: function () {
+          core.logWithSpamControl(
+            `Ping Test Response Timed out for ${url}`,
+            "WARNING",
+            "ping_timeout"
+          );
+          data.updateServerStats(url, false, 8000); // Use timeout value
+        },
+      });
+    }
   }
 
   // ============= MAIN CAPTCHA SOLVER =============

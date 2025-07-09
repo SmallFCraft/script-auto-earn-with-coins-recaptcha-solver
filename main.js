@@ -53,6 +53,11 @@
       dependencies: ["core"],
       required: true,
     },
+    proxy: {
+      url: "proxy.module.js",
+      dependencies: ["core"],
+      required: true,
+    },
     ui: {
       url: "ui.module.js",
       dependencies: ["core", "data"],
@@ -60,12 +65,12 @@
     },
     recaptcha: {
       url: "recaptcha.module.js",
-      dependencies: ["core"],
+      dependencies: ["core", "data", "proxy"],
       required: true,
     },
     workflow: {
       url: "workflow.module.js",
-      dependencies: ["core", "credentials", "data", "ui"],
+      dependencies: ["core", "credentials", "data", "ui", "recaptcha"],
       required: true,
     },
   };
@@ -386,6 +391,11 @@
       // Initialize core system
       if (window.AteexModules.core && window.AteexModules.core.initialize) {
         await window.AteexModules.core.initialize();
+      }
+
+      // Initialize proxy system
+      if (window.AteexModules.proxy && window.AteexModules.proxy.initialize) {
+        await window.AteexModules.proxy.initialize();
       }
 
       // Start main workflow
