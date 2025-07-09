@@ -31,7 +31,7 @@
     "https://raw.githubusercontent.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules/";
   const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
   const CACHE_PREFIX = "ateex_module_";
-  const VERSION = "3.0";
+  const VERSION = "3.1.0";
 
   // Module definitions with dependencies
   const MODULES = {
