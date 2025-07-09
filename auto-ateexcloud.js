@@ -305,7 +305,10 @@
         const cacheKey = this.getCacheKey(moduleName);
         return GM_getValue(cacheKey);
       } catch (e) {
-        log(`Failed to get cached module ${moduleName}: ${e.message}`, "ERROR");
+        this.context.log(
+          `Failed to get cached module ${moduleName}: ${e.message}`,
+          "ERROR"
+        );
         return null;
       }
     }
@@ -320,9 +323,12 @@
         GM_setValue(cacheKey, code);
         GM_setValue(expiryKey, expiry.toString());
 
-        log(`Module ${moduleName} cached successfully`, "DEBUG");
+        this.context.log(`Module ${moduleName} cached successfully`, "DEBUG");
       } catch (e) {
-        log(`Failed to cache module ${moduleName}: ${e.message}`, "WARNING");
+        this.context.log(
+          `Failed to cache module ${moduleName}: ${e.message}`,
+          "WARNING"
+        );
       }
     }
 
@@ -385,13 +391,16 @@
 
     // Internal module loading logic
     async _loadModuleInternal(moduleName, moduleInfo) {
-      log(`Loading module: ${moduleName} - ${moduleInfo.description}`, "INFO");
+      this.context.log(
+        `Loading module: ${moduleName} - ${moduleInfo.description}`,
+        "INFO"
+      );
 
       // Check cache first
       if (this.isCached(moduleName)) {
         const cachedCode = this.getCached(moduleName);
         if (cachedCode) {
-          log(`Using cached module: ${moduleName}`, "DEBUG");
+          this.context.log(`Using cached module: ${moduleName}`, "DEBUG");
           return this.executeModule(moduleName, cachedCode);
         }
       }
@@ -405,11 +414,11 @@
 
       // Try primary URL
       try {
-        log(`Fetching ${moduleName} from primary URL...`, "DEBUG");
+        this.context.log(`Fetching ${moduleName} from primary URL...`, "DEBUG");
         code = await this.fetchModule(primaryUrl);
       } catch (error) {
         lastError = error;
-        log(
+        this.context.log(
           `Primary URL failed for ${moduleName}: ${error.message}`,
           "WARNING"
         );
@@ -418,11 +427,14 @@
       // Try fallback URL if primary failed
       if (!code) {
         try {
-          log(`Fetching ${moduleName} from fallback URL...`, "DEBUG");
+          this.context.log(
+            `Fetching ${moduleName} from fallback URL...`,
+            "DEBUG"
+          );
           code = await this.fetchModule(fallbackUrl);
         } catch (error) {
           lastError = error;
-          log(
+          this.context.log(
             `Fallback URL failed for ${moduleName}: ${error.message}`,
             "ERROR"
           );
@@ -447,7 +459,7 @@
     // Execute module code
     executeModule(moduleName, code) {
       try {
-        log(`Executing module: ${moduleName}`, "DEBUG");
+        this.context.log(`Executing module: ${moduleName}`, "DEBUG");
 
         // Create module context
         const moduleContext = {
@@ -458,8 +470,8 @@
           GM_setValue: GM_setValue,
           GM_getValue: GM_getValue,
           ateexGlobalState: window.ateexGlobalState,
-          log: log,
-          sleep: sleep,
+          log: this.context.log,
+          sleep: this.context.sleep,
           moduleName: moduleName,
         };
 
@@ -475,12 +487,15 @@
 
         const result = moduleFunction(moduleContext);
 
-        log(`Module ${moduleName} executed successfully`, "SUCCESS");
+        this.context.log(
+          `Module ${moduleName} executed successfully`,
+          "SUCCESS"
+        );
         window.ateexGlobalState.modulesLoaded[moduleName] = true;
 
         return result;
       } catch (error) {
-        log(
+        this.context.log(
           `Failed to execute module ${moduleName}: ${error.message}`,
           "ERROR"
         );
@@ -494,11 +509,14 @@
         name => this.config.modules[name].required
       );
 
-      log(`Loading ${requiredModules.length} required modules...`, "INFO");
+      this.context.log(
+        `Loading ${requiredModules.length} required modules...`,
+        "INFO"
+      );
 
       const loadPromises = requiredModules.map(moduleName =>
         this.loadModule(moduleName).catch(error => {
-          log(
+          this.context.log(
             `Failed to load required module ${moduleName}: ${error.message}`,
             "ERROR"
           );
@@ -518,7 +536,7 @@
         );
       }
 
-      log("All required modules loaded successfully!", "SUCCESS");
+      this.context.log("All required modules loaded successfully!", "SUCCESS");
       return results;
     }
 
@@ -531,9 +549,9 @@
           GM_setValue(cacheKey, undefined);
           GM_setValue(expiryKey, undefined);
         });
-        log("Module cache cleared", "INFO");
+        this.context.log("Module cache cleared", "INFO");
       } catch (e) {
-        log(`Failed to clear cache: ${e.message}`, "ERROR");
+        this.context.log(`Failed to clear cache: ${e.message}`, "ERROR");
       }
     }
   }
@@ -542,6 +560,7 @@
 
   async function initialize() {
     try {
+      const context = window.ateexContext;
       context.log(
         "Initializing Ateex Auto Script with Module Loader...",
         "INFO"
@@ -566,7 +585,17 @@
 
       context.log("Ateex Auto Script initialized successfully!", "SUCCESS");
     } catch (error) {
-      context.log(`Initialization failed: ${error.message}`, "ERROR");
+      // Use fallback logging if context is not available
+      if (window.ateexContext && window.ateexContext.log) {
+        window.ateexContext.log(
+          `Initialization failed: ${error.message}`,
+          "ERROR"
+        );
+      } else {
+        console.error(
+          `[Ateex Auto] ❌ Initialization failed: ${error.message}`
+        );
+      }
 
       // Show error to user
       if (
