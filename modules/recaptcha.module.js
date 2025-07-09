@@ -189,31 +189,22 @@
     }
 
     logInfo(
-      `Solving reCAPTCHA with audio using server: ${url} (with proxy rotation)`
+      `🔄 Solving reCAPTCHA with audio using server: ${url} (with proxy)`
     );
 
     const requestStart = Date.now();
 
     try {
-      // Use proxy system for enhanced anti-detection
-      const response = await proxy.makeProxyRequest(
-        {
-          method: "POST",
-          url: url,
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Accept: "text/plain, */*; q=0.01",
-            "Accept-Language": "en-US,en;q=0.9",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          data:
-            "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
-          timeout: 60000,
+      // Use proxy.makeProxyRequest thay vì GM_xmlhttpRequest trực tiếp
+      const response = await proxy.makeProxyRequest({
+        method: "POST",
+        url: url,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
         },
-        3
-      ); // Max 3 proxy attempts
+        data: "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
+        timeout: 60000,
+      });
 
       const responseTime = Date.now() - requestStart;
 
@@ -246,7 +237,7 @@
           ) {
             qSelector(AUDIO_RESPONSE).value = responseText;
             qSelector(VERIFY_BUTTON).click();
-            logSuccess("reCAPTCHA solved successfully via proxy!");
+            logSuccess("✅ reCAPTCHA solved successfully with proxy!");
             data.updateServerStats(url, true, responseTime);
           } else {
             core.logWithSpamControl(
@@ -265,65 +256,11 @@
       }
     } catch (error) {
       const responseTime = Date.now() - requestStart;
-      logError(`reCAPTCHA solver failed with proxy rotation: ${error.message}`);
+      logError(
+        `❌ reCAPTCHA solver error from ${url} (with proxy): ${error.message}`
+      );
       data.updateServerStats(url, false, responseTime);
       waitingForAudioResponse = false;
-
-      // Fallback to direct connection if proxy fails
-      logWarning("Falling back to direct connection...");
-
-      GM_xmlhttpRequest({
-        method: "POST",
-        url: url,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        },
-        data: "input=" + encodeURIComponent(URL) + "&lang=" + recaptchaLanguage,
-        timeout: 60000,
-        onload: function (response) {
-          const responseTime = Date.now() - requestStart;
-
-          try {
-            if (response && response.responseText) {
-              var responseText = response.responseText;
-              if (
-                responseText != "0" &&
-                !responseText.includes("<") &&
-                !responseText.includes(">") &&
-                responseText.length >= 2 &&
-                responseText.length <= 50 &&
-                qSelector(AUDIO_RESPONSE) &&
-                !qSelector(AUDIO_RESPONSE).value
-              ) {
-                qSelector(AUDIO_RESPONSE).value = responseText;
-                qSelector(VERIFY_BUTTON).click();
-                logSuccess("reCAPTCHA solved via fallback connection!");
-                data.updateServerStats(url, true, responseTime);
-              } else {
-                data.updateServerStats(url, false, responseTime);
-              }
-              waitingForAudioResponse = false;
-            }
-          } catch (err) {
-            logError("Fallback request error: " + err.message);
-            data.updateServerStats(url, false, responseTime);
-            waitingForAudioResponse = false;
-          }
-        },
-        onerror: function (e) {
-          const responseTime = Date.now() - requestStart;
-          logError(`Fallback request failed: ${e}`);
-          data.updateServerStats(url, false, responseTime);
-          waitingForAudioResponse = false;
-        },
-        ontimeout: function () {
-          logWarning(`Fallback request timed out`);
-          data.updateServerStats(url, false, 60000);
-          waitingForAudioResponse = false;
-        },
-      });
     }
   }
 
@@ -333,21 +270,16 @@
     var start = new Date().getTime();
 
     try {
-      // Use proxy for ping test to avoid detection
-      const response = await proxy.makeProxyRequest(
-        {
-          method: "GET",
-          url: url,
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          },
-          data: "",
-          timeout: 8000,
+      // Use proxy.makeProxyRequest cho ping test cũng
+      const response = await proxy.makeProxyRequest({
+        method: "GET",
+        url: url,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
         },
-        2
-      ); // Max 2 proxy attempts for ping
+        data: "",
+        timeout: 8000,
+      });
 
       var end = new Date().getTime();
       var milliseconds = end - start;
@@ -362,10 +294,10 @@
 
         // Update server stats
         data.updateServerStats(url, true, milliseconds);
-        logInfo(`Ping test successful for ${url} via proxy: ${milliseconds}ms`);
+        logSuccess(`🌐 Ping success: ${url} (${milliseconds}ms) with proxy`);
       } else {
         core.logWithSpamControl(
-          `Server ${url} ping failed: invalid response via proxy`,
+          `Server ${url} ping failed: invalid response`,
           "WARNING",
           "ping_failed"
         );
@@ -377,70 +309,8 @@
     } catch (error) {
       var end = new Date().getTime();
       var milliseconds = end - start;
-
-      logWarning(
-        `Proxy ping failed for ${url}, trying direct connection: ${error.message}`
-      );
-
-      // Fallback to direct connection
-      GM_xmlhttpRequest({
-        method: "GET",
-        url: url,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-        data: "",
-        timeout: 8000,
-        onload: function (response) {
-          var end = new Date().getTime();
-          var milliseconds = end - start;
-
-          if (
-            response &&
-            response.responseText &&
-            response.responseText == "0"
-          ) {
-            // Update latency list
-            for (let i = 0; i < serversList.length; i++) {
-              if (url == serversList[i]) {
-                latencyList[i] = milliseconds;
-              }
-            }
-
-            // Update server stats
-            data.updateServerStats(url, true, milliseconds);
-            logInfo(
-              `Ping test successful for ${url} via direct connection: ${milliseconds}ms`
-            );
-          } else {
-            core.logWithSpamControl(
-              `Server ${url} ping failed: invalid response`,
-              "WARNING",
-              "ping_failed"
-            );
-            data.updateServerStats(url, false, milliseconds);
-          }
-
-          // Save latency cache after all pings complete
-          data.saveServerLatency(latencyList);
-        },
-        onerror: function (e) {
-          var end = new Date().getTime();
-          var milliseconds = end - start;
-          logError(`Ping test error for ${url}: ${e}`);
-          data.updateServerStats(url, false, milliseconds);
-        },
-        ontimeout: function () {
-          core.logWithSpamControl(
-            `Ping Test Response Timed out for ${url}`,
-            "WARNING",
-            "ping_timeout"
-          );
-          data.updateServerStats(url, false, 8000); // Use timeout value
-        },
-      });
+      logError(`❌ Ping test error for ${url} (with proxy): ${error.message}`);
+      data.updateServerStats(url, false, milliseconds);
     }
   }
 

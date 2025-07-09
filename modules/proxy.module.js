@@ -1,6 +1,6 @@
 /**
- * Proxy Module - Proxy Management for Anti-Detection
- * Manages Webshare proxy list and provides proxy rotation for requests
+ * Proxy Module - Proxy Management for reCAPTCHA requests
+ * Handles proxy selection, rotation, and fallback mechanisms
  */
 
 (function (exports) {
@@ -13,24 +13,11 @@
   if (!core) {
     throw new Error("Core module not loaded - missing dependency");
   }
+  const { log, logInfo, logError, logSuccess, logWarning, logDebug } = core;
 
-  const {
-    log,
-    logInfo,
-    logError,
-    logSuccess,
-    logWarning,
-    safeJsonParse,
-    safeJsonStringify,
-  } = core;
+  // ============= PROXY CONFIGURATION =============
 
-  // ============= PROXY CONSTANTS =============
-
-  const PROXY_STORAGE_KEY = "ateex_proxy_list";
-  const PROXY_STATS_KEY = "ateex_proxy_stats";
-  const PROXY_CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
-
-  // Default Webshare proxy list (updated từ user input)
+  // Default proxy list từ Webshare
   const DEFAULT_PROXY_LIST = [
     "38.154.227.167:5868:kdzrrkqv:763ww9x8x6x3",
     "198.23.239.134:6540:kdzrrkqv:763ww9x8x6x3",
@@ -44,102 +31,96 @@
     "206.41.172.74:6634:kdzrrkqv:763ww9x8x6x3",
   ];
 
-  // ============= PROXY STATE =============
-
-  let cachedProxyList = null;
-  let proxyStats = {};
-  let lastUsedProxyIndex = -1;
-
-  // ============= PROXY PARSING =============
-
-  // Parse proxy string "IP:PORT:USERNAME:PASSWORD" to object
-  function parseProxy(proxyString) {
-    try {
-      const parts = proxyString.trim().split(":");
-      if (parts.length !== 4) {
-        throw new Error(`Invalid proxy format: ${proxyString}`);
-      }
-
-      return {
-        ip: parts[0],
-        port: parseInt(parts[1]),
-        username: parts[2],
-        password: parts[3],
-        url: `http://${parts[2]}:${parts[3]}@${parts[0]}:${parts[1]}`,
-        display: `${parts[0]}:${parts[1]}`,
-      };
-    } catch (e) {
-      logError(`Error parsing proxy: ${e.message}`);
-      return null;
-    }
-  }
+  const PROXY_STORAGE_KEY = "ateex_proxy_list";
+  const PROXY_STATS_KEY = "ateex_proxy_stats";
+  const MAX_PROXY_RETRIES = 3;
+  const PROXY_TIMEOUT = 15000; // 15 seconds timeout
 
   // ============= PROXY MANAGEMENT =============
 
-  // Load proxy list from storage or use default
+  let proxyList = [];
+  let proxyStats = {};
+  let lastUsedProxyIndex = -1;
+
+  // Parse proxy string để support cả 2 định dạng
+  function parseProxy(proxyString) {
+    const parts = proxyString.split(":");
+
+    if (parts.length === 2) {
+      // Format: "ip:port"
+      return {
+        host: parts[0],
+        port: parseInt(parts[1]),
+        username: null,
+        password: null,
+        proxy: `${parts[0]}:${parts[1]}`,
+      };
+    } else if (parts.length === 4) {
+      // Format: "ip:port:username:password"
+      return {
+        host: parts[0],
+        port: parseInt(parts[1]),
+        username: parts[2],
+        password: parts[3],
+        proxy: `${parts[0]}:${parts[1]}`,
+      };
+    } else {
+      throw new Error(`Invalid proxy format: ${proxyString}`);
+    }
+  }
+
+  // Load proxy list từ localStorage hoặc sử dụng default
   function loadProxyList() {
     try {
       const saved = localStorage.getItem(PROXY_STORAGE_KEY);
       if (saved) {
-        const data = safeJsonParse(saved);
-        if (data && data.proxies && Array.isArray(data.proxies)) {
-          // Check if cache is not expired
-          if (Date.now() - data.timestamp < PROXY_CACHE_EXPIRY) {
-            logInfo(`Loaded ${data.proxies.length} proxies from cache`);
-            return data.proxies;
-          } else {
-            logInfo("Proxy cache expired, will use default list");
-          }
+        const savedList = JSON.parse(saved);
+        if (Array.isArray(savedList) && savedList.length > 0) {
+          proxyList = savedList.map(parseProxy);
+          logSuccess(`📡 Loaded ${proxyList.length} proxies from storage`);
+          return;
         }
       }
 
-      // Use default list if no cache or expired
-      logInfo(
-        `Using default proxy list (${DEFAULT_PROXY_LIST.length} proxies)`
-      );
-      saveProxyList(DEFAULT_PROXY_LIST);
-      return DEFAULT_PROXY_LIST;
+      // Sử dụng default list nếu không có trong storage
+      proxyList = DEFAULT_PROXY_LIST.map(parseProxy);
+      saveProxyList();
+      logSuccess(`📡 Initialized with ${proxyList.length} default proxies`);
     } catch (e) {
-      logError(`Error loading proxy list: ${e.message}`);
-      return DEFAULT_PROXY_LIST;
+      logError("Error loading proxy list: " + e.message);
+      // Fallback về default list
+      proxyList = DEFAULT_PROXY_LIST.map(parseProxy);
+      logWarning("Using default proxy list as fallback");
     }
   }
 
-  // Save proxy list to storage
-  function saveProxyList(proxyList) {
+  // Save proxy list to localStorage
+  function saveProxyList() {
     try {
-      const data = {
-        timestamp: Date.now(),
-        proxies: proxyList,
-      };
-      localStorage.setItem(PROXY_STORAGE_KEY, safeJsonStringify(data));
-      logInfo(`Saved ${proxyList.length} proxies to cache`);
-      return true;
+      const proxyStrings = proxyList.map(proxy => {
+        if (proxy.username && proxy.password) {
+          return `${proxy.host}:${proxy.port}:${proxy.username}:${proxy.password}`;
+        } else {
+          return `${proxy.host}:${proxy.port}`;
+        }
+      });
+      localStorage.setItem(PROXY_STORAGE_KEY, JSON.stringify(proxyStrings));
     } catch (e) {
-      logError(`Error saving proxy list: ${e.message}`);
-      return false;
+      logError("Error saving proxy list: " + e.message);
     }
   }
-
-  // Get cached proxy list
-  function getProxyList() {
-    if (!cachedProxyList) {
-      cachedProxyList = loadProxyList();
-    }
-    return cachedProxyList;
-  }
-
-  // ============= PROXY STATS =============
 
   // Load proxy statistics
   function loadProxyStats() {
     try {
       const saved = localStorage.getItem(PROXY_STATS_KEY);
       if (saved) {
-        proxyStats = safeJsonParse(saved, {});
+        proxyStats = JSON.parse(saved);
+      } else {
+        proxyStats = {};
       }
     } catch (e) {
-      logError(`Error loading proxy stats: ${e.message}`);
+      logError("Error loading proxy stats: " + e.message);
       proxyStats = {};
     }
   }
@@ -147,260 +128,206 @@
   // Save proxy statistics
   function saveProxyStats() {
     try {
-      localStorage.setItem(PROXY_STATS_KEY, safeJsonStringify(proxyStats));
+      // Throttled save để giảm localStorage overhead
+      clearTimeout(window.proxyStatsTimeout);
+      window.proxyStatsTimeout = setTimeout(() => {
+        localStorage.setItem(PROXY_STATS_KEY, JSON.stringify(proxyStats));
+      }, 2000);
     } catch (e) {
-      logError(`Error saving proxy stats: ${e.message}`);
+      logError("Error saving proxy stats: " + e.message);
     }
   }
 
   // Update proxy statistics
-  function updateProxyStats(
-    proxyDisplay,
-    success,
-    responseTime = 0,
-    error = null
-  ) {
-    try {
-      if (!proxyStats[proxyDisplay]) {
-        proxyStats[proxyDisplay] = {
-          totalRequests: 0,
-          successRequests: 0,
-          failedRequests: 0,
-          totalResponseTime: 0,
-          lastUsed: 0,
-          lastError: null,
-          consecutiveFailures: 0,
-        };
-      }
-
-      const stats = proxyStats[proxyDisplay];
-      stats.totalRequests++;
-      stats.lastUsed = Date.now();
-
-      if (success) {
-        stats.successRequests++;
-        stats.totalResponseTime += responseTime;
-        stats.consecutiveFailures = 0; // Reset failure count
-        stats.lastError = null;
-      } else {
-        stats.failedRequests++;
-        stats.consecutiveFailures++;
-        stats.lastError = error || "Unknown error";
-      }
-
-      // Save stats periodically to avoid too frequent writes
-      clearTimeout(window.proxyStatsTimeout);
-      window.proxyStatsTimeout = setTimeout(saveProxyStats, 2000);
-    } catch (e) {
-      logError(`Error updating proxy stats: ${e.message}`);
+  function updateProxyStats(proxyKey, success, responseTime) {
+    if (!proxyStats[proxyKey]) {
+      proxyStats[proxyKey] = {
+        totalRequests: 0,
+        successfulRequests: 0,
+        totalResponseTime: 0,
+        lastUsed: 0,
+        failures: 0,
+        avgResponseTime: 0,
+      };
     }
-  }
 
-  // ============= PROXY SELECTION =============
+    const stats = proxyStats[proxyKey];
+    stats.totalRequests++;
+    stats.lastUsed = Date.now();
 
-  // Get next available proxy (with rotation and filtering)
-  function getNextProxy(excludeProxies = []) {
-    try {
-      const proxyList = getProxyList();
-      if (!proxyList || proxyList.length === 0) {
-        logWarning("No proxies available");
-        return null;
-      }
-
-      // Parse all proxies and filter out excluded ones
-      const availableProxies = proxyList
-        .map(parseProxy)
-        .filter(proxy => proxy !== null)
-        .filter(proxy => !excludeProxies.includes(proxy.display));
-
-      if (availableProxies.length === 0) {
-        logWarning("No available proxies after filtering");
-        return null;
-      }
-
-      // Load stats for intelligent selection
-      loadProxyStats();
-
-      // Score each proxy based on success rate and recent failures
-      const scoredProxies = availableProxies.map(proxy => {
-        const stats = proxyStats[proxy.display];
-        let score = Math.random() * 100; // Base random score
-
-        if (stats && stats.totalRequests > 0) {
-          const successRate = stats.successRequests / stats.totalRequests;
-          score += successRate * 50; // Bonus for success rate
-
-          // Penalty for consecutive failures
-          score -= stats.consecutiveFailures * 20;
-
-          // Penalty for recent usage (to encourage rotation)
-          const timeSinceLastUse = Date.now() - stats.lastUsed;
-          if (timeSinceLastUse < 60000) {
-            // Less than 1 minute
-            score -= 30;
-          }
-        }
-
-        return { proxy, score };
-      });
-
-      // Sort by score and select best one
-      scoredProxies.sort((a, b) => b.score - a.score);
-      const selectedProxy = scoredProxies[0].proxy;
-
-      logInfo(
-        `Selected proxy: ${selectedProxy.display} (score: ${Math.round(
-          scoredProxies[0].score
-        )})`
+    if (success) {
+      stats.successfulRequests++;
+      stats.totalResponseTime += responseTime;
+      stats.avgResponseTime = Math.round(
+        stats.totalResponseTime / stats.successfulRequests
       );
-      return selectedProxy;
-    } catch (e) {
-      logError(`Error selecting proxy: ${e.message}`);
-      return null;
+      stats.failures = 0; // Reset failures on success
+    } else {
+      stats.failures++;
     }
+
+    saveProxyStats();
   }
 
-  // Get random proxy (simple random selection)
-  function getRandomProxy(excludeProxies = []) {
-    try {
-      const proxyList = getProxyList();
-      if (!proxyList || proxyList.length === 0) {
-        return null;
-      }
+  // Chọn proxy ngẫu nhiên với logic thông minh
+  function selectRandomProxy(excludeProxies = []) {
+    if (proxyList.length === 0) {
+      loadProxyList();
+    }
 
-      const availableProxies = proxyList
-        .map(parseProxy)
-        .filter(proxy => proxy !== null)
-        .filter(proxy => !excludeProxies.includes(proxy.display));
-
-      if (availableProxies.length === 0) {
-        return null;
-      }
-
-      const randomIndex = Math.floor(Math.random() * availableProxies.length);
-      const selectedProxy = availableProxies[randomIndex];
-
-      logInfo(`Random proxy selected: ${selectedProxy.display}`);
-      return selectedProxy;
-    } catch (e) {
-      logError(`Error getting random proxy: ${e.message}`);
+    if (proxyList.length === 0) {
+      logError("No proxies available");
       return null;
     }
+
+    // Filter ra những proxy bị exclude
+    const availableProxies = proxyList.filter(proxy => {
+      const proxyKey = proxy.proxy;
+      return !excludeProxies.includes(proxyKey);
+    });
+
+    if (availableProxies.length === 0) {
+      logWarning("All proxies excluded, using full list");
+      return proxyList[Math.floor(Math.random() * proxyList.length)];
+    }
+
+    // Weighted random selection dựa trên success rate
+    const proxiesWithWeights = availableProxies.map(proxy => {
+      const stats = proxyStats[proxy.proxy];
+      let weight = 1; // Base weight
+
+      if (stats && stats.totalRequests > 0) {
+        const successRate = stats.successfulRequests / stats.totalRequests;
+        weight = successRate * 10; // Higher success rate = higher weight
+
+        // Penalty cho proxy có failures gần đây
+        if (stats.failures > 0) {
+          weight = weight / (stats.failures * 2);
+        }
+      }
+
+      return { proxy, weight: Math.max(weight, 0.1) }; // Minimum weight
+    });
+
+    // Random weighted selection
+    const totalWeight = proxiesWithWeights.reduce(
+      (sum, item) => sum + item.weight,
+      0
+    );
+    let random = Math.random() * totalWeight;
+
+    for (const item of proxiesWithWeights) {
+      random -= item.weight;
+      if (random <= 0) {
+        return item.proxy;
+      }
+    }
+
+    // Fallback về random proxy nếu weighted selection fails
+    return availableProxies[
+      Math.floor(Math.random() * availableProxies.length)
+    ];
+  }
+
+  // Get proxy configuration cho GM_xmlhttpRequest
+  function getProxyConfig(proxy) {
+    if (!proxy) return null;
+
+    const config = {
+      proxy: proxy.proxy,
+    };
+
+    // Thêm authentication nếu có
+    if (proxy.username && proxy.password) {
+      config.proxyAuth = `${proxy.username}:${proxy.password}`;
+    }
+
+    return config;
   }
 
   // ============= PROXY REQUEST WRAPPER =============
 
-  // Enhanced GM_xmlhttpRequest with proxy support and retry logic
-  function makeProxyRequest(options, maxRetries = 3) {
+  // Enhanced GM_xmlhttpRequest với proxy support và retry logic
+  function makeProxyRequest(options) {
     return new Promise((resolve, reject) => {
-      let attempts = 0;
-      let usedProxies = [];
+      const excludedProxies = [];
+      let attempt = 0;
 
       function attemptRequest() {
-        attempts++;
+        attempt++;
 
-        // Get next available proxy
-        const proxy = getNextProxy(usedProxies);
-        if (!proxy) {
-          const error = `No available proxies after ${attempts} attempts`;
-          logError(error);
-          reject(new Error(error));
+        if (attempt > MAX_PROXY_RETRIES) {
+          logError("All proxy attempts failed");
+          reject(new Error("All proxy attempts failed"));
           return;
         }
 
-        usedProxies.push(proxy.display);
-        const startTime = Date.now();
+        // Chọn proxy cho attempt này
+        const selectedProxy = selectRandomProxy(excludedProxies);
+        if (!selectedProxy) {
+          logError("No available proxy for request");
+          reject(new Error("No available proxy"));
+          return;
+        }
+
+        const proxyConfig = getProxyConfig(selectedProxy);
+        const requestStart = Date.now();
 
         logInfo(
-          `Attempt ${attempts}/${maxRetries} using proxy: ${proxy.display}`
+          `🔄 Proxy attempt ${attempt}/${MAX_PROXY_RETRIES}: ${selectedProxy.proxy}`
         );
 
-        // Create request with proxy headers
-        const proxyOptions = {
+        // Merge proxy config vào request options
+        const requestOptions = {
           ...options,
-          headers: {
-            ...options.headers,
-            "Proxy-Authorization": `Basic ${btoa(
-              `${proxy.username}:${proxy.password}`
-            )}`,
-            "X-Proxy-URL": proxy.url,
+          timeout: PROXY_TIMEOUT,
+          onload: function (response) {
+            const responseTime = Date.now() - requestStart;
+
+            if (response.status === 200) {
+              updateProxyStats(selectedProxy.proxy, true, responseTime);
+              logSuccess(
+                `✅ Proxy success: ${selectedProxy.proxy} (${responseTime}ms)`
+              );
+              resolve(response);
+            } else {
+              updateProxyStats(selectedProxy.proxy, false, responseTime);
+              logWarning(
+                `⚠️ Proxy HTTP error ${response.status}: ${selectedProxy.proxy}`
+              );
+
+              // Thêm proxy vào exclude list và retry
+              excludedProxies.push(selectedProxy.proxy);
+              setTimeout(attemptRequest, 1000); // Wait 1s before retry
+            }
           },
-          // Add proxy info for potential use by external tools
-          proxyInfo: {
-            url: proxy.url,
-            ip: proxy.ip,
-            port: proxy.port,
-            username: proxy.username,
-            password: proxy.password,
+          onerror: function (error) {
+            const responseTime = Date.now() - requestStart;
+            updateProxyStats(selectedProxy.proxy, false, responseTime);
+            logWarning(`❌ Proxy error: ${selectedProxy.proxy} - ${error}`);
+
+            // Thêm proxy vào exclude list và retry
+            excludedProxies.push(selectedProxy.proxy);
+            setTimeout(attemptRequest, 1000); // Wait 1s before retry
+          },
+          ontimeout: function () {
+            const responseTime = Date.now() - requestStart;
+            updateProxyStats(selectedProxy.proxy, false, responseTime);
+            logWarning(`⏰ Proxy timeout: ${selectedProxy.proxy}`);
+
+            // Thêm proxy vào exclude list và retry
+            excludedProxies.push(selectedProxy.proxy);
+            setTimeout(attemptRequest, 1000); // Wait 1s before retry
           },
         };
 
-        // Override URL to use proxy service if needed
-        if (options.useProxyService) {
-          proxyOptions.url = options.url; // Keep original for now
+        // Apply proxy config nếu có
+        if (proxyConfig) {
+          Object.assign(requestOptions, proxyConfig);
         }
 
-        GM_xmlhttpRequest({
-          ...proxyOptions,
-          timeout: options.timeout || 30000,
-
-          onload: function (response) {
-            const responseTime = Date.now() - startTime;
-            updateProxyStats(proxy.display, true, responseTime);
-
-            logSuccess(
-              `Request successful via proxy ${proxy.display} (${responseTime}ms)`
-            );
-            resolve(response);
-          },
-
-          onerror: function (error) {
-            const responseTime = Date.now() - startTime;
-            updateProxyStats(
-              proxy.display,
-              false,
-              responseTime,
-              "Request error"
-            );
-
-            logWarning(`Request failed via proxy ${proxy.display}: ${error}`);
-
-            if (attempts < maxRetries) {
-              logInfo(
-                `Retrying with different proxy... (${attempts}/${maxRetries})`
-              );
-              setTimeout(attemptRequest, 1000 * attempts); // Progressive delay
-            } else {
-              logError(`All proxy attempts failed after ${maxRetries} retries`);
-              reject(
-                new Error(`Request failed after ${maxRetries} proxy attempts`)
-              );
-            }
-          },
-
-          ontimeout: function () {
-            const responseTime = Date.now() - startTime;
-            updateProxyStats(proxy.display, false, responseTime, "Timeout");
-
-            logWarning(`Request timeout via proxy ${proxy.display}`);
-
-            if (attempts < maxRetries) {
-              logInfo(
-                `Retrying with different proxy due to timeout... (${attempts}/${maxRetries})`
-              );
-              setTimeout(attemptRequest, 1000 * attempts);
-            } else {
-              logError(
-                `All proxy attempts timed out after ${maxRetries} retries`
-              );
-              reject(
-                new Error(
-                  `Request timed out after ${maxRetries} proxy attempts`
-                )
-              );
-            }
-          },
-        });
+        // Make request với proxy
+        GM_xmlhttpRequest(requestOptions);
       }
 
       // Start first attempt
@@ -408,192 +335,130 @@
     });
   }
 
-  // ============= PROXY TESTING =============
+  // ============= PROXY MANAGEMENT METHODS =============
 
-  // Test a specific proxy
-  function testProxy(proxyString) {
-    return new Promise(resolve => {
-      const proxy = parseProxy(proxyString);
-      if (!proxy) {
-        resolve({ success: false, error: "Invalid proxy format" });
-        return;
-      }
-
-      const startTime = Date.now();
-
-      makeProxyRequest(
-        {
-          method: "GET",
-          url: "https://ipv4.webshare.io/",
-          timeout: 10000,
-        },
-        1
-      )
-        .then(response => {
-          const responseTime = Date.now() - startTime;
-          resolve({
-            success: true,
-            responseTime,
-            ip: response.responseText.trim(),
-          });
-        })
-        .catch(error => {
-          const responseTime = Date.now() - startTime;
-          resolve({
-            success: false,
-            responseTime,
-            error: error.message,
-          });
-        });
-    });
-  }
-
-  // Test all proxies
-  async function testAllProxies() {
-    const proxyList = getProxyList();
-    logInfo(`Testing ${proxyList.length} proxies...`);
-
-    const results = [];
-
-    for (let i = 0; i < proxyList.length; i++) {
-      const proxyString = proxyList[i];
+  // Thêm proxy mới vào list
+  function addProxy(proxyString) {
+    try {
       const proxy = parseProxy(proxyString);
 
-      if (!proxy) {
-        results.push({
-          proxy: proxyString,
-          success: false,
-          error: "Invalid format",
-        });
-        continue;
+      // Check duplicate
+      const existing = proxyList.find(p => p.proxy === proxy.proxy);
+      if (existing) {
+        logWarning(`Proxy already exists: ${proxy.proxy}`);
+        return false;
       }
 
-      logInfo(`Testing proxy ${i + 1}/${proxyList.length}: ${proxy.display}`);
-      const result = await testProxy(proxyString);
-
-      results.push({
-        proxy: proxy.display,
-        success: result.success,
-        responseTime: result.responseTime,
-        error: result.error,
-        ip: result.ip,
-      });
-
-      // Small delay between tests
-      await new Promise(resolve => setTimeout(resolve, 500));
+      proxyList.push(proxy);
+      saveProxyList();
+      logSuccess(`Added new proxy: ${proxy.proxy}`);
+      return true;
+    } catch (e) {
+      logError("Error adding proxy: " + e.message);
+      return false;
     }
-
-    const successCount = results.filter(r => r.success).length;
-    logSuccess(
-      `Proxy testing completed: ${successCount}/${proxyList.length} working`
-    );
-
-    return results;
   }
 
-  // ============= PROXY UTILITIES =============
+  // Remove proxy khỏi list
+  function removeProxy(proxyString) {
+    const proxyKey = proxyString.includes(":")
+      ? proxyString.split(":").slice(0, 2).join(":")
+      : proxyString;
+
+    const index = proxyList.findIndex(p => p.proxy === proxyKey);
+    if (index !== -1) {
+      proxyList.splice(index, 1);
+      saveProxyList();
+
+      // Xóa stats của proxy này
+      delete proxyStats[proxyKey];
+      saveProxyStats();
+
+      logSuccess(`Removed proxy: ${proxyKey}`);
+      return true;
+    } else {
+      logWarning(`Proxy not found: ${proxyKey}`);
+      return false;
+    }
+  }
 
   // Get proxy statistics summary
   function getProxyStatsSummary() {
-    loadProxyStats();
-
     const summary = {
-      totalProxies: Object.keys(proxyStats).length,
+      totalProxies: proxyList.length,
       workingProxies: 0,
       failedProxies: 0,
-      averageResponseTime: 0,
-      totalRequests: 0,
+      proxies: [],
     };
 
-    let totalResponseTime = 0;
-    let totalSuccessRequests = 0;
+    proxyList.forEach(proxy => {
+      const stats = proxyStats[proxy.proxy] || {
+        totalRequests: 0,
+        successfulRequests: 0,
+        failures: 0,
+        avgResponseTime: 0,
+      };
 
-    Object.values(proxyStats).forEach(stats => {
-      summary.totalRequests += stats.totalRequests;
+      const successRate =
+        stats.totalRequests > 0
+          ? Math.round((stats.successfulRequests / stats.totalRequests) * 100)
+          : 0;
 
-      if (stats.successRequests > 0) {
+      const proxyInfo = {
+        proxy: proxy.proxy,
+        hasAuth: !!(proxy.username && proxy.password),
+        totalRequests: stats.totalRequests,
+        successRate: successRate,
+        failures: stats.failures,
+        avgResponseTime: stats.avgResponseTime,
+        lastUsed: stats.lastUsed,
+      };
+
+      summary.proxies.push(proxyInfo);
+
+      if (stats.failures < 3 && successRate > 50) {
         summary.workingProxies++;
-        totalResponseTime += stats.totalResponseTime;
-        totalSuccessRequests += stats.successRequests;
-      }
-
-      if (stats.consecutiveFailures >= 3) {
+      } else if (
+        stats.failures >= 3 ||
+        (stats.totalRequests > 0 && successRate < 50)
+      ) {
         summary.failedProxies++;
       }
     });
 
-    if (totalSuccessRequests > 0) {
-      summary.averageResponseTime = Math.round(
-        totalResponseTime / totalSuccessRequests
-      );
-    }
-
     return summary;
   }
 
-  // Reset proxy statistics
+  // Reset all proxy statistics
   function resetProxyStats() {
     proxyStats = {};
-    saveProxyStats();
-    logInfo("Proxy statistics reset");
+    localStorage.removeItem(PROXY_STATS_KEY);
+    logSuccess("Proxy statistics reset");
   }
 
-  // ============= INITIALIZATION =============
+  // ============= MODULE INITIALIZATION =============
 
-  // Initialize proxy module
   function initialize() {
+    loadProxyList();
     loadProxyStats();
-
-    // Test connectivity on startup (optional)
-    if (getProxyList().length > 0) {
-      logSuccess(
-        `[Proxy Module] Initialized with ${getProxyList().length} proxies`
-      );
-
-      // Optional: Test a random proxy on startup
-      setTimeout(() => {
-        const randomProxy = getRandomProxy();
-        if (randomProxy) {
-          logInfo(`Testing random proxy on startup: ${randomProxy.display}`);
-          testProxy(
-            randomProxy.display.split(":")[0] +
-              ":" +
-              randomProxy.display.split(":")[1] +
-              ":" +
-              randomProxy.username +
-              ":" +
-              randomProxy.password
-          ).then(result => {
-            if (result.success) {
-              logSuccess(
-                `Startup proxy test successful: ${randomProxy.display} (${result.responseTime}ms)`
-              );
-            } else {
-              logWarning(
-                `Startup proxy test failed: ${randomProxy.display} - ${result.error}`
-              );
-            }
-          });
-        }
-      }, 5000);
-    } else {
-      logWarning("[Proxy Module] No proxies available");
-    }
+    logSuccess(`[Proxy Module] Initialized with ${proxyList.length} proxies`);
   }
+
+  // Auto-initialize
+  initialize();
 
   // ============= EXPORTS =============
 
-  exports.parseProxy = parseProxy;
-  exports.getProxyList = getProxyList;
-  exports.saveProxyList = saveProxyList;
-  exports.getNextProxy = getNextProxy;
-  exports.getRandomProxy = getRandomProxy;
   exports.makeProxyRequest = makeProxyRequest;
-  exports.testProxy = testProxy;
-  exports.testAllProxies = testAllProxies;
-  exports.updateProxyStats = updateProxyStats;
+  exports.selectRandomProxy = selectRandomProxy;
+  exports.getProxyConfig = getProxyConfig;
+  exports.addProxy = addProxy;
+  exports.removeProxy = removeProxy;
   exports.getProxyStatsSummary = getProxyStatsSummary;
   exports.resetProxyStats = resetProxyStats;
+  exports.updateProxyStats = updateProxyStats;
+  exports.loadProxyList = loadProxyList;
+  exports.saveProxyList = saveProxyList;
+  exports.proxyList = proxyList;
   exports.initialize = initialize;
-  exports.DEFAULT_PROXY_LIST = DEFAULT_PROXY_LIST;
 })(exports);

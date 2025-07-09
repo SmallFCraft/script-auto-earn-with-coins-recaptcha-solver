@@ -393,11 +393,6 @@
         await window.AteexModules.core.initialize();
       }
 
-      // Initialize proxy system
-      if (window.AteexModules.proxy && window.AteexModules.proxy.initialize) {
-        await window.AteexModules.proxy.initialize();
-      }
-
       // Start main workflow
       if (window.AteexModules.workflow && window.AteexModules.workflow.start) {
         await window.AteexModules.workflow.start();

@@ -12,6 +12,7 @@
   const data = AteexModules.data;
   const ui = AteexModules.ui;
   const recaptcha = AteexModules.recaptcha;
+  const proxy = AteexModules.proxy;
 
   // Validate dependencies before destructuring
   if (!core) {
@@ -28,6 +29,9 @@
   }
   if (!recaptcha) {
     throw new Error("Recaptcha module not loaded - missing dependency");
+  }
+  if (!proxy) {
+    throw new Error("Proxy module not loaded - missing dependency");
   }
 
   const { log, logInfo, logError, logSuccess, logWarning, qSelector, sleep } =
