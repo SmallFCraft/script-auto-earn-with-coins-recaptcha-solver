@@ -115,19 +115,19 @@
   };
 
   // Memory storage backend (fallback)
-  const memoryStorage = new Map();
+  const memoryStorageMap = new Map();
   const memoryStorageBackend = {
-    get: key => memoryStorage.get(key) || null,
+    get: key => memoryStorageMap.get(key) || null,
     set: (key, value) => {
-      memoryStorage.set(key, value);
+      memoryStorageMap.set(key, value);
       return true;
     },
-    remove: key => memoryStorage.delete(key),
+    remove: key => memoryStorageMap.delete(key),
     clear: () => {
-      memoryStorage.clear();
+      memoryStorageMap.clear();
       return true;
     },
-    keys: () => Array.from(memoryStorage.keys()),
+    keys: () => Array.from(memoryStorageMap.keys()),
   };
 
   // ============= STORAGE MANAGER CLASS =============

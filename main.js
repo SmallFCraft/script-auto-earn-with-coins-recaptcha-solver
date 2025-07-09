@@ -19,6 +19,49 @@
 (function () {
   "use strict";
 
+  // ============= CONTEXT DETECTION =============
+
+  // Detect if we're in an iframe/recaptcha context
+  const isIframe = window.self !== window.top;
+  const isRecaptchaContext = window.location.href.includes("recaptcha");
+  const isMainPage =
+    window.location.hostname.includes("ateex.cloud") ||
+    window.location.hostname.includes("dash.ateex");
+
+  // Handle reCAPTCHA iframe context separately
+  if (isRecaptchaContext && isIframe) {
+    console.log(
+      "[Ateex Modular] 🔍 Detected reCAPTCHA iframe context - initializing reCAPTCHA handler only"
+    );
+
+    // Simple reCAPTCHA iframe handler - no error UI, no full module loading
+    function initializeRecaptchaHandler() {
+      try {
+        // Listen for parent messages
+        window.addEventListener("message", function (event) {
+          if (event.data && event.data.type === "ateex_credentials_ready") {
+            console.log("[reCAPTCHA] 📨 Credentials ready message received");
+          }
+        });
+
+        // Basic audio captcha solving logic would go here
+        console.log("[reCAPTCHA] 🎯 reCAPTCHA handler initialized");
+      } catch (e) {
+        // Only log errors, don't show UI in iframe
+        console.error("[reCAPTCHA] ❌ Handler error:", e.message);
+      }
+    }
+
+    // Initialize the reCAPTCHA handler
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initializeRecaptchaHandler);
+    } else {
+      initializeRecaptchaHandler();
+    }
+
+    return; // Exit early for reCAPTCHA context
+  }
+
   // Prevent multiple instances
   if (window.ateexModularRunning) {
     console.log("[Ateex Modular] Script already running, skipping...");
@@ -601,7 +644,25 @@
   // ============= ERROR UI =============
 
   function showErrorUI(message) {
+    // Don't show error UI in iframe/recaptcha contexts
+    if (
+      window.self !== window.top ||
+      window.location.href.includes("recaptcha")
+    ) {
+      console.error("[Ateex Modular] ❌ Error in iframe context:", message);
+      return;
+    }
+
+    // Check if error UI already exists to prevent duplicates
+    if (document.getElementById("ateex-error-ui")) {
+      console.warn(
+        "[Ateex Modular] ⚠️ Error UI already exists, skipping duplicate"
+      );
+      return;
+    }
+
     const errorDiv = document.createElement("div");
+    errorDiv.id = "ateex-error-ui";
     errorDiv.style.cssText = `
       position: fixed;
       top: 20px;
