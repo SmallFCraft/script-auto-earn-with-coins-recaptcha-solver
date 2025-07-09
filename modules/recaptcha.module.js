@@ -508,24 +508,59 @@
 
           // Trigger custom event to notify login page
           try {
+            // Trigger on current window (safe)
             window.dispatchEvent(
               new CustomEvent("recaptchaSolved", {
                 detail: { solved: true, timestamp: Date.now() },
               })
             );
 
-            // Also trigger on parent/top windows
+            // Try to trigger on parent/top windows with cross-origin safety
             if (window.parent && window.parent !== window) {
-              window.parent.dispatchEvent(
-                new CustomEvent("recaptchaSolved", {
-                  detail: { solved: true, timestamp: Date.now() },
-                })
-              );
+              try {
+                // Check if we can access parent (same origin)
+                if (
+                  window.parent.location.hostname === window.location.hostname
+                ) {
+                  window.parent.dispatchEvent(
+                    new CustomEvent("recaptchaSolved", {
+                      detail: { solved: true, timestamp: Date.now() },
+                    })
+                  );
+                } else {
+                  // Cross-origin, use postMessage instead
+                  window.parent.postMessage(
+                    {
+                      type: "ateex_captcha_solved",
+                      timestamp: Date.now(),
+                    },
+                    "*"
+                  );
+                }
+              } catch (crossOriginError) {
+                // Fallback to postMessage for cross-origin
+                try {
+                  window.parent.postMessage(
+                    {
+                      type: "ateex_captcha_solved",
+                      timestamp: Date.now(),
+                    },
+                    "*"
+                  );
+                } catch (postMessageError) {
+                  // Silent fail for cross-origin restrictions
+                  logDebug("Could not send message to parent (cross-origin)");
+                }
+              }
             }
 
-            logInfo("📡 Triggered custom recaptchaSolved events");
+            logInfo("📡 Triggered custom recaptchaSolved events safely");
           } catch (e) {
-            logWarning("Error triggering custom events: " + e.message);
+            core.logWithSpamControl(
+              "Error triggering custom events: " + e.message,
+              "WARNING",
+              "custom_event_error"
+            );
           }
         }
 

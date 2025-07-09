@@ -11,6 +11,7 @@
 // @connect      raw.githubusercontent.com
 // @connect      github.com
 // @connect      ipv4.webshare.io
+// @connect      httpbin.org
 // @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue

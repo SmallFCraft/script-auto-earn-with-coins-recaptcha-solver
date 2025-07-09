@@ -412,6 +412,7 @@
 
       let proxyTableRows = "";
       proxyStats.proxies.forEach(proxy => {
+        // Status based on performance
         const statusIcon =
           proxy.failures >= 3
             ? "❌"
@@ -421,23 +422,34 @@
             ? "⚪"
             : "⚠️";
 
+        // Auth status - separate from performance status
+        const authIcon = proxy.hasAuth ? "🔐" : "🚫";
+
         const lastUsedText =
           proxy.lastUsed > 0
             ? new Date(proxy.lastUsed).toLocaleTimeString()
             : "Never";
 
+        // Color code the success rate
+        const successRateColor =
+          proxy.successRate >= 70
+            ? "#4CAF50"
+            : proxy.successRate >= 50
+            ? "#FF9800"
+            : proxy.successRate > 0
+            ? "#f44336"
+            : "#666";
+
         proxyTableRows += `
           <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 11px;">
-            <td style="padding: 5px;">${statusIcon}</td>
-            <td style="padding: 5px; font-family: monospace;">${
-              proxy.proxy
-            }</td>
-            <td style="padding: 5px;">${proxy.hasAuth ? "✅" : "❌"}</td>
-            <td style="padding: 5px;">${proxy.totalRequests}</td>
-            <td style="padding: 5px;">${proxy.successRate}%</td>
-            <td style="padding: 5px;">${proxy.failures}</td>
-            <td style="padding: 5px;">${proxy.avgResponseTime}ms</td>
-            <td style="padding: 5px;">${lastUsedText}</td>
+            <td style="padding: 5px; text-align: center;">${statusIcon}</td>
+            <td style="padding: 5px; font-family: monospace;">${proxy.proxy}</td>
+            <td style="padding: 5px; text-align: center;">${authIcon}</td>
+            <td style="padding: 5px; text-align: center;">${proxy.totalRequests}</td>
+            <td style="padding: 5px; text-align: center; color: ${successRateColor}; font-weight: bold;">${proxy.successRate}%</td>
+            <td style="padding: 5px; text-align: center;">${proxy.failures}</td>
+            <td style="padding: 5px; text-align: center;">${proxy.avgResponseTime}ms</td>
+            <td style="padding: 5px; text-align: center;">${lastUsedText}</td>
           </tr>
         `;
       });
@@ -479,7 +491,8 @@
           </div>
           
           <div style="margin-top: 15px; font-size: 12px; opacity: 0.8;">
-            <div>Legend: ✅ Good | ⚠️ Warning | ❌ Failed | ⚪ Unused</div>
+            <div><strong>Status Legend:</strong> ✅ Good (≥70%) | ⚠️ Warning (50-69%) | ❌ Failed (<50% or 3+ fails) | ⚪ Unused</div>
+            <div><strong>Auth Icons:</strong> 🔐 Has Auth | 🚫 No Auth</div>
             <div>Proxies rotate automatically for each reCAPTCHA request</div>
           </div>
         </div>
@@ -498,6 +511,29 @@
 
               // Close and reopen modal to refresh
               setTimeout(() => this.showProxyManager(), 500);
+            }
+          },
+        },
+        {
+          label: "Test All Proxies",
+          callback: async () => {
+            if (AteexModules.proxy) {
+              logInfo("🧪 Starting proxy tests...");
+              try {
+                const result = await AteexModules.proxy.testAllProxies();
+                if (result) {
+                  logSuccess(
+                    `🧪 Testing completed: ${result.passed}/${result.tested} proxies working`
+                  );
+                } else {
+                  logWarning("🧪 Proxy testing was skipped (proxy disabled)");
+                }
+
+                // Close and reopen modal to refresh stats
+                setTimeout(() => this.showProxyManager(), 1000);
+              } catch (error) {
+                logError("🧪 Proxy testing failed: " + error.message);
+              }
             }
           },
         },

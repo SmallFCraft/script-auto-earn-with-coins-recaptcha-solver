@@ -521,6 +521,78 @@
     logSuccess("Proxy statistics reset");
   }
 
+  // Test all proxies with a simple request
+  async function testAllProxies() {
+    if (!isProxyEnabled()) {
+      logWarning("Proxy disabled, cannot test proxies");
+      return;
+    }
+
+    logInfo("🧪 Testing all proxies...");
+    const testUrl = "https://httpbin.org/ip"; // Simple test endpoint
+    let testedCount = 0;
+    let successCount = 0;
+
+    for (const proxy of proxyList) {
+      try {
+        logInfo(
+          `Testing proxy ${testedCount + 1}/${proxyList.length}: ${proxy.proxy}`
+        );
+
+        const startTime = Date.now();
+        const response = await new Promise((resolve, reject) => {
+          const proxyConfig = getProxyConfig(proxy);
+
+          GM_xmlhttpRequest({
+            method: "GET",
+            url: testUrl,
+            timeout: 10000, // 10 second timeout for tests
+            ...proxyConfig,
+            onload: resolve,
+            onerror: reject,
+            ontimeout: () => reject(new Error("Timeout")),
+          });
+        });
+
+        const responseTime = Date.now() - startTime;
+
+        if (response.status === 200) {
+          updateProxyStats(proxy.proxy, true, responseTime);
+          successCount++;
+          logSuccess(
+            `✅ Proxy test passed: ${proxy.proxy} (${responseTime}ms)`
+          );
+        } else {
+          updateProxyStats(proxy.proxy, false, responseTime);
+          logWarning(
+            `⚠️ Proxy test failed: ${proxy.proxy} - HTTP ${response.status}`
+          );
+        }
+      } catch (error) {
+        const errorMsg =
+          error && error.message
+            ? error.message
+            : error && error.toString
+            ? error.toString()
+            : typeof error === "string"
+            ? error
+            : "Unknown error";
+        updateProxyStats(proxy.proxy, false, 10000);
+        logWarning(`❌ Proxy test error: ${proxy.proxy} - ${errorMsg}`);
+      }
+
+      testedCount++;
+
+      // Small delay between tests to avoid overwhelming
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    logSuccess(
+      `🧪 Proxy testing completed: ${successCount}/${testedCount} passed`
+    );
+    return { tested: testedCount, passed: successCount };
+  }
+
   // ============= MODULE INITIALIZATION =============
 
   function initialize() {
@@ -532,6 +604,16 @@
         proxyEnabled ? "enabled" : "disabled"
       })`
     );
+
+    // Auto-test proxies if no stats exist and proxy is enabled
+    if (proxyEnabled && Object.keys(proxyStats).length === 0) {
+      setTimeout(() => {
+        logInfo("🧪 No proxy statistics found, running initial proxy tests...");
+        testAllProxies().catch(error => {
+          logWarning("Initial proxy test failed: " + error.message);
+        });
+      }, 5000); // Wait 5 seconds after initialization
+    }
   }
 
   // Auto-initialize
@@ -546,6 +628,7 @@
   exports.removeProxy = removeProxy;
   exports.getProxyStatsSummary = getProxyStatsSummary;
   exports.resetProxyStats = resetProxyStats;
+  exports.testAllProxies = testAllProxies;
   exports.updateProxyStats = updateProxyStats;
   exports.loadProxyList = loadProxyList;
   exports.saveProxyList = saveProxyList;
