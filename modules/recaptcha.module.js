@@ -336,6 +336,120 @@
     }
   }
 
+  // ============= AUTOMATED QUERIES HANDLING =============
+
+  async function handleAutomatedQueriesWithProxy() {
+    try {
+      logInfo("🔄 Handling automated queries with proxy strategy...");
+
+      // Check if proxy is enabled
+      if (proxy.isProxyEnabled()) {
+        logInfo("🌐 Proxy enabled - implementing proxy rotation strategy");
+
+        // Get current proxy stats to identify problematic proxy
+        const proxyStats = proxy.getProxyStatsSummary();
+        const recentlyUsedProxy = proxyStats.proxies
+          .filter(p => p.lastUsed > 0)
+          .sort((a, b) => b.lastUsed - a.lastUsed)[0];
+
+        if (recentlyUsedProxy) {
+          logWarning(`🔴 Marking proxy as blocked: ${recentlyUsedProxy.proxy}`);
+
+          // Mark proxy as blocked by Google automated queries detection
+          proxy.markProxyAsBlocked(recentlyUsedProxy.proxy);
+
+          logInfo("📊 Proxy marked as blocked - will have lowest priority");
+        }
+
+        // Test if we have other working proxies
+        const workingProxies = proxyStats.proxies.filter(
+          p => p.failures < 3 && p.proxy !== recentlyUsedProxy?.proxy
+        );
+
+        if (workingProxies.length > 0) {
+          logSuccess(`✅ Found ${workingProxies.length} alternative proxies`);
+
+          // Clear Google cookies but don't reload immediately
+          await core.clearGoogleCookies(false);
+
+          // Wait a bit for cookies to clear
+          await core.sleep(2000);
+
+          logInfo("🔄 Reloading with proxy rotation...");
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+
+          return;
+        } else {
+          logWarning(
+            "⚠️ No working proxies available, trying fallback strategies"
+          );
+
+          // Try to test all proxies to refresh stats
+          logInfo("🧪 Testing all proxies to find working ones...");
+          const testResult = await proxy.testAllProxies();
+
+          if (testResult && testResult.passed > 0) {
+            logSuccess(
+              `✅ Found ${testResult.passed} working proxies after testing`
+            );
+
+            // Clear Google cookies and reload
+            await core.clearGoogleCookies(false);
+            await core.sleep(2000);
+
+            logInfo("🔄 Reloading with fresh proxy data...");
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+
+            return;
+          } else {
+            logWarning(
+              "❌ No proxies working, falling back to direct connection"
+            );
+
+            // Temporarily disable proxy and clear cookies
+            proxy.setProxyEnabled(false);
+            await core.clearGoogleCookies(false);
+
+            logInfo(
+              "🚫 Disabled proxy temporarily - will re-enable after cooldown"
+            );
+
+            // Re-enable proxy after cooldown period
+            setTimeout(() => {
+              proxy.setProxyEnabled(true);
+              logInfo("🌐 Re-enabled proxy after cooldown");
+            }, 5 * 60 * 1000); // 5 minutes cooldown
+
+            // Reload without proxy
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
+
+            return;
+          }
+        }
+      } else {
+        logInfo("🚫 Proxy disabled - using standard recovery method");
+      }
+
+      // Fallback to original behavior if proxy not available
+      logInfo("🔄 Using standard automated queries recovery...");
+
+      // Clear Google cookies and reload to reset limits
+      await core.clearGoogleCookies(true);
+    } catch (error) {
+      logError("❌ Error in automated queries handler: " + error.message);
+
+      // Ultimate fallback - just clear and reload
+      logWarning("🆘 Using emergency fallback recovery");
+      await core.clearGoogleCookies(true);
+    }
+  }
+
   // ============= MAIN CAPTCHA SOLVER =============
 
   function initCaptchaSolver() {
@@ -618,19 +732,17 @@
           qSelector(DOSCAPTCHA).innerText.length > 0
         ) {
           logWarning(
-            "Automated Queries Detected - clearing storage and implementing cooldown"
+            "🚫 Automated Queries Detected - implementing enhanced recovery with proxy rotation"
           );
-
-          // Clear Google cookies and reload to reset limits
-          await core.clearGoogleCookies(true);
 
           core.state.captchaInProgress = false;
           clearInterval(captchaInterval);
 
-          // Set cooldown period to avoid immediate retry
+          // Set cooldown period
           core.state.lastAutomatedQueriesTime = Date.now();
 
-          // No need for setTimeout since we'll reload the page
+          // Enhanced recovery strategy with proxy integration
+          await handleAutomatedQueriesWithProxy();
         }
       } catch (err) {
         logError(
@@ -649,6 +761,7 @@
   exports.getTextFromAudio = getTextFromAudio;
   exports.pingTest = pingTest;
   exports.initRecaptchaVars = initRecaptchaVars;
+  exports.handleAutomatedQueriesWithProxy = handleAutomatedQueriesWithProxy;
   exports.serversList = serversList;
   exports.latencyList = latencyList;
 })(exports);

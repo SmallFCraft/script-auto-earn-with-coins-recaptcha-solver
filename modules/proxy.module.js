@@ -29,6 +29,86 @@
     "142.147.128.93:6593:kdzrrkqv:763ww9x8x6x3",
     "104.239.105.125:6655:kdzrrkqv:763ww9x8x6x3",
     "206.41.172.74:6634:kdzrrkqv:763ww9x8x6x3",
+    "156.253.166.39:3129::",
+    "154.213.193.50:3129::",
+    "156.248.82.131:3129::",
+    "156.242.34.12:3129::",
+    "45.201.10.76:3129::",
+    "156.242.33.139:3129::",
+    "156.228.176.249:3129::",
+    "154.213.166.44:3129::",
+    "154.213.203.58:3129::",
+    "154.214.1.165:3129::",
+    "154.213.198.12:3129::",
+    "156.228.124.210:3129::",
+    "156.233.92.24:3129::",
+    "156.249.63.40:3129::",
+    "156.228.190.127:3129::",
+    "156.242.40.205:3129::",
+    "156.233.89.135:3129::",
+    "156.228.78.49:3129::",
+    "156.228.105.68:3129::",
+    "156.228.110.100:3129::",
+    "45.201.11.250:3129::",
+    "156.242.39.36:3129::",
+    "156.249.63.214:3129::",
+    "154.213.167.174:3129::",
+    "156.253.177.108:3129::",
+    "156.253.178.94:3129::",
+    "156.253.176.167:3129::",
+    "156.228.94.45:3129::",
+    "156.242.43.24:3129::",
+    "156.253.178.22:3129::",
+    "156.233.85.118:3129::",
+    "156.228.85.51:3129::",
+    "156.248.84.246:3129::",
+    "45.202.79.180:3129::",
+    "156.228.113.138:3129::",
+    "156.228.180.44:3129::",
+    "154.213.165.20:3129::",
+    "156.228.176.219:3129::",
+    "156.253.175.126:3129::",
+    "156.249.61.82:3129::",
+    "156.228.90.39:3129::",
+    "156.242.35.45:3129::",
+    "156.228.183.97:3129::",
+    "154.213.204.142:3129::",
+    "156.228.98.61:3129::",
+    "156.233.92.244:3129::",
+    "156.253.176.137:3129::",
+    "156.253.178.38:3129::",
+    "156.228.117.144:3129::",
+    "156.228.184.227:3129::",
+    "156.248.82.232:3129::",
+    "154.213.165.93:3129::",
+    "156.228.91.50:3129::",
+    "154.213.204.48:3129::",
+    "156.248.86.147:3129::",
+    "156.242.42.191:3129::",
+    "156.248.87.7:3129::",
+    "156.242.44.201:3129::",
+    "156.228.91.247:3129::",
+    "156.233.86.160:3129::",
+    "156.233.88.16:3129::",
+    "156.228.97.140:3129::",
+    "156.228.109.239:3129::",
+    "156.242.44.160:3129::",
+    "156.253.171.78:3129::",
+    "156.249.56.174:3129::",
+    "45.202.78.62:3129::",
+    "156.228.96.3:3129::",
+    "156.228.125.89:3129::",
+    "156.233.89.117:3129::",
+    "156.228.108.88:3129::",
+    "156.253.174.45:3129::",
+    "156.242.34.97:3129::",
+    "154.94.15.226:3129::",
+    "156.228.117.180:3129::",
+    "156.233.95.207:3129::",
+    "156.228.76.248:3129::",
+    "156.253.178.68:3129::",
+    "156.228.77.68:3129::",
+    "154.214.1.40:3129::",
   ];
 
   const PROXY_STORAGE_KEY = "ateex_proxy_list";
@@ -162,7 +242,12 @@
   }
 
   // Update proxy statistics
-  function updateProxyStats(proxyKey, success, responseTime) {
+  function updateProxyStats(
+    proxyKey,
+    success,
+    responseTime,
+    isBlocked = false
+  ) {
     if (!proxyStats[proxyKey]) {
       proxyStats[proxyKey] = {
         totalRequests: 0,
@@ -171,6 +256,8 @@
         lastUsed: 0,
         failures: 0,
         avgResponseTime: 0,
+        blockedCount: 0,
+        lastBlocked: 0,
       };
     }
 
@@ -184,12 +271,30 @@
       stats.avgResponseTime = Math.round(
         stats.totalResponseTime / stats.successfulRequests
       );
-      stats.failures = 0; // Reset failures on success
+      stats.failures = Math.max(0, stats.failures - 1); // Reduce failures on success
     } else {
       stats.failures++;
+
+      if (isBlocked) {
+        stats.blockedCount++;
+        stats.lastBlocked = Date.now();
+        logWarning(`🚫 Proxy ${proxyKey} marked as blocked by Google`);
+      }
     }
 
     saveProxyStats();
+  }
+
+  // Mark proxy as blocked by Google
+  function markProxyAsBlocked(proxyKey) {
+    updateProxyStats(proxyKey, false, 30000, true);
+
+    // Add extra failures for blocked proxy
+    for (let i = 0; i < 3; i++) {
+      updateProxyStats(proxyKey, false, 30000, false);
+    }
+
+    logWarning(`🔴 Proxy ${proxyKey} has been marked as blocked by Google`);
   }
 
   // Chọn proxy ngẫu nhiên với logic thông minh
@@ -214,7 +319,7 @@
       return proxyList[Math.floor(Math.random() * proxyList.length)];
     }
 
-    // Weighted random selection dựa trên success rate
+    // Weighted random selection dựa trên success rate và block status
     const proxiesWithWeights = availableProxies.map(proxy => {
       const stats = proxyStats[proxy.proxy];
       let weight = 1; // Base weight
@@ -227,9 +332,22 @@
         if (stats.failures > 0) {
           weight = weight / (stats.failures * 2);
         }
+
+        // Heavy penalty cho blocked proxies
+        if (stats.blockedCount > 0) {
+          const timeSinceBlocked = Date.now() - (stats.lastBlocked || 0);
+          const blockCooldown = 60 * 60 * 1000; // 1 hour cooldown for blocked proxies
+
+          if (timeSinceBlocked < blockCooldown) {
+            weight = weight / (stats.blockedCount * 10); // Heavy penalty for recent blocks
+            logDebug(`Proxy ${proxy.proxy} blocked recently, reducing weight`);
+          } else {
+            weight = weight / (stats.blockedCount * 2); // Lighter penalty for old blocks
+          }
+        }
       }
 
-      return { proxy, weight: Math.max(weight, 0.1) }; // Minimum weight
+      return { proxy, weight: Math.max(weight, 0.01) }; // Lower minimum weight for blocked proxies
     });
 
     // Random weighted selection
@@ -473,6 +591,7 @@
       totalProxies: proxyList.length,
       workingProxies: 0,
       failedProxies: 0,
+      blockedProxies: 0,
       proxies: [],
     };
 
@@ -497,11 +616,25 @@
         failures: stats.failures,
         avgResponseTime: stats.avgResponseTime,
         lastUsed: stats.lastUsed,
+        blockedCount: stats.blockedCount || 0,
+        lastBlocked: stats.lastBlocked || 0,
       };
 
       summary.proxies.push(proxyInfo);
 
-      if (stats.failures < 3 && successRate > 50) {
+      // Count proxy categories
+      if (stats.blockedCount > 0) {
+        const timeSinceBlocked = Date.now() - (stats.lastBlocked || 0);
+        const cooldownPeriod = 60 * 60 * 1000; // 1 hour
+
+        if (timeSinceBlocked < cooldownPeriod) {
+          summary.blockedProxies++;
+        } else if (stats.failures < 3 && successRate > 50) {
+          summary.workingProxies++; // Recovered from block
+        } else {
+          summary.failedProxies++;
+        }
+      } else if (stats.failures < 3 && successRate > 50) {
         summary.workingProxies++;
       } else if (
         stats.failures >= 3 ||
@@ -630,6 +763,7 @@
   exports.resetProxyStats = resetProxyStats;
   exports.testAllProxies = testAllProxies;
   exports.updateProxyStats = updateProxyStats;
+  exports.markProxyAsBlocked = markProxyAsBlocked;
   exports.loadProxyList = loadProxyList;
   exports.saveProxyList = saveProxyList;
   exports.isProxyEnabled = isProxyEnabled;

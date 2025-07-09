@@ -412,15 +412,21 @@
 
       let proxyTableRows = "";
       proxyStats.proxies.forEach(proxy => {
-        // Status based on performance
-        const statusIcon =
-          proxy.failures >= 3
-            ? "❌"
-            : proxy.successRate >= 70
-            ? "✅"
-            : proxy.totalRequests === 0
-            ? "⚪"
-            : "⚠️";
+        // Status based on performance and block status
+        let statusIcon;
+        if (proxy.blockedCount > 0) {
+          const timeSinceBlocked = Date.now() - proxy.lastBlocked;
+          const cooldownPeriod = 60 * 60 * 1000; // 1 hour
+          statusIcon = timeSinceBlocked < cooldownPeriod ? "🚫" : "🔶"; // Blocked vs Recovering
+        } else if (proxy.failures >= 3) {
+          statusIcon = "❌";
+        } else if (proxy.successRate >= 70) {
+          statusIcon = "✅";
+        } else if (proxy.totalRequests === 0) {
+          statusIcon = "⚪";
+        } else {
+          statusIcon = "⚠️";
+        }
 
         // Auth status - separate from performance status
         const authIcon = proxy.hasAuth ? "🔐" : "🚫";
@@ -428,6 +434,11 @@
         const lastUsedText =
           proxy.lastUsed > 0
             ? new Date(proxy.lastUsed).toLocaleTimeString()
+            : "Never";
+
+        const lastBlockedText =
+          proxy.lastBlocked > 0
+            ? new Date(proxy.lastBlocked).toLocaleTimeString()
             : "Never";
 
         // Color code the success rate
@@ -440,6 +451,9 @@
             ? "#f44336"
             : "#666";
 
+        // Color code blocked count
+        const blockedColor = proxy.blockedCount > 0 ? "#f44336" : "#666";
+
         proxyTableRows += `
           <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 11px;">
             <td style="padding: 5px; text-align: center;">${statusIcon}</td>
@@ -448,8 +462,10 @@
             <td style="padding: 5px; text-align: center;">${proxy.totalRequests}</td>
             <td style="padding: 5px; text-align: center; color: ${successRateColor}; font-weight: bold;">${proxy.successRate}%</td>
             <td style="padding: 5px; text-align: center;">${proxy.failures}</td>
+            <td style="padding: 5px; text-align: center; color: ${blockedColor}; font-weight: bold;">${proxy.blockedCount}</td>
             <td style="padding: 5px; text-align: center;">${proxy.avgResponseTime}ms</td>
             <td style="padding: 5px; text-align: center;">${lastUsedText}</td>
+            <td style="padding: 5px; text-align: center;">${lastBlockedText}</td>
           </tr>
         `;
       });
@@ -463,10 +479,11 @@
         <div style="font-size: 14px;">
           <div style="margin-bottom: 15px; text-align: center;">
             <div style="margin-bottom: 10px;">Status: ${statusBadge}</div>
-            <div style="display: flex; justify-content: space-between;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>📊 Total: ${proxyStats.totalProxies}</div>
               <div>✅ Working: ${proxyStats.workingProxies}</div>
               <div>❌ Failed: ${proxyStats.failedProxies}</div>
+              <div>🚫 Blocked: ${proxyStats.blockedProxies}</div>
             </div>
           </div>
           
@@ -480,8 +497,10 @@
                   <th style="padding: 8px;">Requests</th>
                   <th style="padding: 8px;">Success</th>
                   <th style="padding: 8px;">Fails</th>
+                  <th style="padding: 8px;">Blocks</th>
                   <th style="padding: 8px;">Avg Time</th>
                   <th style="padding: 8px;">Last Used</th>
+                  <th style="padding: 8px;">Last Block</th>
                 </tr>
               </thead>
               <tbody>
@@ -491,8 +510,9 @@
           </div>
           
           <div style="margin-top: 15px; font-size: 12px; opacity: 0.8;">
-            <div><strong>Status Legend:</strong> ✅ Good (≥70%) | ⚠️ Warning (50-69%) | ❌ Failed (<50% or 3+ fails) | ⚪ Unused</div>
+            <div><strong>Status Legend:</strong> ✅ Good | ⚠️ Warning | ❌ Failed | 🚫 Blocked | 🔶 Recovering | ⚪ Unused</div>
             <div><strong>Auth Icons:</strong> 🔐 Has Auth | 🚫 No Auth</div>
+            <div><strong>Recovery:</strong> Use "Recover from Block" if Google detects automation</div>
             <div>Proxies rotate automatically for each reCAPTCHA request</div>
           </div>
         </div>
@@ -534,6 +554,25 @@
               } catch (error) {
                 logError("🧪 Proxy testing failed: " + error.message);
               }
+            }
+          },
+        },
+        {
+          label: "Recover from Block",
+          callback: async () => {
+            if (
+              AteexModules.recaptcha &&
+              AteexModules.recaptcha.handleAutomatedQueriesWithProxy
+            ) {
+              logInfo("🚫 Manually triggering automated queries recovery...");
+              try {
+                await AteexModules.recaptcha.handleAutomatedQueriesWithProxy();
+                logSuccess("✅ Recovery procedure initiated");
+              } catch (error) {
+                logError("❌ Recovery failed: " + error.message);
+              }
+            } else {
+              logWarning("❌ Recovery function not available");
             }
           },
         },
