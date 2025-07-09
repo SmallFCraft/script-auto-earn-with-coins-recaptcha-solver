@@ -256,8 +256,19 @@
       }
     } catch (error) {
       const responseTime = Date.now() - requestStart;
+
+      // Better error formatting
+      const errorMsg =
+        error && error.message
+          ? error.message
+          : error && error.toString
+          ? error.toString()
+          : typeof error === "string"
+          ? error
+          : "Unknown error";
+
       logError(
-        `❌ reCAPTCHA solver error from ${url} (with proxy): ${error.message}`
+        `❌ reCAPTCHA solver error from ${url} (with proxy): ${errorMsg}`
       );
       data.updateServerStats(url, false, responseTime);
       waitingForAudioResponse = false;
@@ -309,7 +320,18 @@
     } catch (error) {
       var end = new Date().getTime();
       var milliseconds = end - start;
-      logError(`❌ Ping test error for ${url} (with proxy): ${error.message}`);
+
+      // Better error formatting
+      const errorMsg =
+        error && error.message
+          ? error.message
+          : error && error.toString
+          ? error.toString()
+          : typeof error === "string"
+          ? error
+          : "Unknown error";
+
+      logError(`❌ Ping test error for ${url} (with proxy): ${errorMsg}`);
       data.updateServerStats(url, false, milliseconds);
     }
   }

@@ -10,6 +10,8 @@
 // @connect      engageub1.pythonanywhere.com
 // @connect      raw.githubusercontent.com
 // @connect      github.com
+// @connect      ipv4.webshare.io
+// @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue

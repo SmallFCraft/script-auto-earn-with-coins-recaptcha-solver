@@ -442,12 +442,20 @@
         `;
       });
 
+      const proxyEnabledStatus = AteexModules.proxy.isProxyEnabled();
+      const statusBadge = proxyEnabledStatus
+        ? '<span style="background: #4CAF50; padding: 2px 8px; border-radius: 10px; font-size: 11px;">✅ ENABLED</span>'
+        : '<span style="background: #f44336; padding: 2px 8px; border-radius: 10px; font-size: 11px;">❌ DISABLED</span>';
+
       const content = `
         <div style="font-size: 14px;">
-          <div style="margin-bottom: 15px; display: flex; justify-content: space-between;">
-            <div>📊 Total: ${proxyStats.totalProxies}</div>
-            <div>✅ Working: ${proxyStats.workingProxies}</div>
-            <div>❌ Failed: ${proxyStats.failedProxies}</div>
+          <div style="margin-bottom: 15px; text-align: center;">
+            <div style="margin-bottom: 10px;">Status: ${statusBadge}</div>
+            <div style="display: flex; justify-content: space-between;">
+              <div>📊 Total: ${proxyStats.totalProxies}</div>
+              <div>✅ Working: ${proxyStats.workingProxies}</div>
+              <div>❌ Failed: ${proxyStats.failedProxies}</div>
+            </div>
           </div>
           
           <div style="overflow-x: auto; max-height: 300px; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px;">
@@ -479,11 +487,29 @@
 
       showModal("🌐 Proxy Manager", content, [
         {
+          label: AteexModules.proxy.isProxyEnabled()
+            ? "Disable Proxy"
+            : "Enable Proxy",
+          callback: () => {
+            if (AteexModules.proxy) {
+              const currentState = AteexModules.proxy.isProxyEnabled();
+              AteexModules.proxy.setProxyEnabled(!currentState);
+              logSuccess(`🌐 Proxy ${!currentState ? "enabled" : "disabled"}`);
+
+              // Close and reopen modal to refresh
+              setTimeout(() => this.showProxyManager(), 500);
+            }
+          },
+        },
+        {
           label: "Reset Stats",
           callback: () => {
             if (AteexModules.proxy) {
               AteexModules.proxy.resetProxyStats();
               logSuccess("🔄 Proxy statistics reset");
+
+              // Close and reopen modal to refresh
+              setTimeout(() => this.showProxyManager(), 500);
             }
           },
         },

@@ -33,6 +33,7 @@
 
   const PROXY_STORAGE_KEY = "ateex_proxy_list";
   const PROXY_STATS_KEY = "ateex_proxy_stats";
+  const PROXY_ENABLED_KEY = "ateex_proxy_enabled";
   const MAX_PROXY_RETRIES = 3;
   const PROXY_TIMEOUT = 15000; // 15 seconds timeout
 
@@ -41,6 +42,28 @@
   let proxyList = [];
   let proxyStats = {};
   let lastUsedProxyIndex = -1;
+  let proxyEnabled = true; // Default enabled
+
+  // Check if proxy is enabled
+  function isProxyEnabled() {
+    try {
+      const saved = localStorage.getItem(PROXY_ENABLED_KEY);
+      return saved !== null ? saved === "true" : true; // Default true
+    } catch (e) {
+      return true;
+    }
+  }
+
+  // Enable/disable proxy
+  function setProxyEnabled(enabled) {
+    try {
+      proxyEnabled = enabled;
+      localStorage.setItem(PROXY_ENABLED_KEY, enabled.toString());
+      logInfo(`🌐 Proxy ${enabled ? "enabled" : "disabled"}`);
+    } catch (e) {
+      logError("Error saving proxy enabled state: " + e.message);
+    }
+  }
 
   // Parse proxy string để support cả 2 định dạng
   function parseProxy(proxyString) {
@@ -233,16 +256,22 @@
   function getProxyConfig(proxy) {
     if (!proxy) return null;
 
-    const config = {
-      proxy: proxy.proxy,
-    };
+    // Tampermonkey proxy format cần full URL với authentication
+    let proxyUrl;
 
-    // Thêm authentication nếu có
     if (proxy.username && proxy.password) {
-      config.proxyAuth = `${proxy.username}:${proxy.password}`;
+      // Format: "http://username:password@host:port"
+      proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.host}:${proxy.port}`;
+    } else {
+      // Format: "http://host:port"
+      proxyUrl = `http://${proxy.host}:${proxy.port}`;
     }
 
-    return config;
+    logDebug(`Proxy config: ${proxyUrl.replace(/:([^:]+)@/, ":***@")}`); // Hide password in logs
+
+    return {
+      proxy: proxyUrl,
+    };
   }
 
   // ============= PROXY REQUEST WRAPPER =============
@@ -250,6 +279,18 @@
   // Enhanced GM_xmlhttpRequest với proxy support và retry logic
   function makeProxyRequest(options) {
     return new Promise((resolve, reject) => {
+      // Check if proxy is disabled, fallback to direct request
+      if (!isProxyEnabled()) {
+        logInfo("🚫 Proxy disabled, making direct request");
+        GM_xmlhttpRequest({
+          ...options,
+          onload: resolve,
+          onerror: reject,
+          ontimeout: () => reject(new Error("Request timeout")),
+        });
+        return;
+      }
+
       const excludedProxies = [];
       let attempt = 0;
 
@@ -257,16 +298,49 @@
         attempt++;
 
         if (attempt > MAX_PROXY_RETRIES) {
-          logError("All proxy attempts failed");
-          reject(new Error("All proxy attempts failed"));
+          logWarning(
+            "All proxy attempts failed, trying direct request as fallback"
+          );
+
+          // Fallback to direct request
+          GM_xmlhttpRequest({
+            ...options,
+            onload: function (response) {
+              logWarning("✅ Fallback direct request succeeded");
+              resolve(response);
+            },
+            onerror: function (error) {
+              const errorMsg =
+                error && error.message
+                  ? error.message
+                  : error && error.toString
+                  ? error.toString()
+                  : typeof error === "string"
+                  ? error
+                  : "Unknown error";
+              logError(`❌ Direct request also failed: ${errorMsg}`);
+              reject(new Error("All proxy attempts and direct request failed"));
+            },
+            ontimeout: function () {
+              logError("❌ Direct request timeout");
+              reject(new Error("All proxy attempts and direct request failed"));
+            },
+          });
           return;
         }
 
         // Chọn proxy cho attempt này
         const selectedProxy = selectRandomProxy(excludedProxies);
         if (!selectedProxy) {
-          logError("No available proxy for request");
-          reject(new Error("No available proxy"));
+          logWarning("No available proxy, trying direct request");
+
+          // Fallback to direct request immediately
+          GM_xmlhttpRequest({
+            ...options,
+            onload: resolve,
+            onerror: reject,
+            ontimeout: () => reject(new Error("Direct request timeout")),
+          });
           return;
         }
 
@@ -304,7 +378,18 @@
           onerror: function (error) {
             const responseTime = Date.now() - requestStart;
             updateProxyStats(selectedProxy.proxy, false, responseTime);
-            logWarning(`❌ Proxy error: ${selectedProxy.proxy} - ${error}`);
+
+            // Better error formatting
+            const errorMsg =
+              error && error.message
+                ? error.message
+                : error && error.toString
+                ? error.toString()
+                : typeof error === "string"
+                ? error
+                : "Unknown error";
+
+            logWarning(`❌ Proxy error: ${selectedProxy.proxy} - ${errorMsg}`);
 
             // Thêm proxy vào exclude list và retry
             excludedProxies.push(selectedProxy.proxy);
@@ -441,7 +526,12 @@
   function initialize() {
     loadProxyList();
     loadProxyStats();
-    logSuccess(`[Proxy Module] Initialized with ${proxyList.length} proxies`);
+    proxyEnabled = isProxyEnabled(); // Load proxy enabled state
+    logSuccess(
+      `[Proxy Module] Initialized with ${proxyList.length} proxies (${
+        proxyEnabled ? "enabled" : "disabled"
+      })`
+    );
   }
 
   // Auto-initialize
@@ -459,6 +549,8 @@
   exports.updateProxyStats = updateProxyStats;
   exports.loadProxyList = loadProxyList;
   exports.saveProxyList = saveProxyList;
+  exports.isProxyEnabled = isProxyEnabled;
+  exports.setProxyEnabled = setProxyEnabled;
   exports.proxyList = proxyList;
   exports.initialize = initialize;
 })(exports);
