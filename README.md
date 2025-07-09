@@ -1,220 +1,251 @@
-# 🎯 Ateex Cloud Auto-Earn Script v2.4 with Advanced reCAPTCHA Solver
+# Ateex Cloud Auto Script - Modular System
 
-![Version](https://img.shields.io/badge/version-2.4-brightgreen.svg) ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-Required-blue.svg) ![License](https://img.shields.io/badge/license-MIT-green.svg)
+A sophisticated modular Tampermonkey script for automated coin earning on Ateex Cloud with intelligent reCAPTCHA solving and comprehensive statistics tracking.
 
-> 📌 **Phiên bản 2.4** - Script tự động hóa hoàn toàn quá trình kiếm coin trên [Ateex Cloud](https://dash.ateex.cloud/) với hệ thống reCAPTCHA solver AI tiên tiến và giao diện quản lý thông minh!
+## 🚀 Quick Start
 
----
+1. **Install Main Script**: Install `main.js` in Tampermonkey
+2. **Upload Modules**: Upload all module files to your GitHub repository
+3. **Configure URLs**: Ensure the GitHub URLs match your repository structure
+4. **Run**: Visit `https://dash.ateex.cloud` and enter your credentials
 
-## 🚀 Tính năng nổi bật v2.4
+## 📁 Project Structure
 
-### 🆕 **Two-Stage Startup System**
-- **Setup Phase**: Nhập credentials một lần duy nhất
-- **Runtime Phase**: Tự động hoạt động sau khi setup
-- **Smart Detection**: Tự động phát hiện user cũ và tiếp tục hoạt động
+```
+ateex-modular-system/
+├── main.js                      # Main loader script (~300 lines)
+├── modules/
+│   ├── core.module.js          # Core utilities and global state
+│   ├── credentials.module.js   # Secure credential management
+│   ├── data.module.js          # Statistics and data persistence
+│   ├── ui.module.js            # User interface components
+│   ├── recaptcha.module.js     # reCAPTCHA solver with AI
+│   ├── workflow.module.js      # Auto-earning workflow logic
+│   └── error.module.js         # Error detection and handling
+└── README.md                   # This file
+```
 
-### 🎛️ **Advanced UI Management**
-- **Unified Settings Menu**: Gộp tất cả tính năng vào menu dropdown gọn gàng
-- **Real-time Stats Panel**: Hiển thị thống kê chi tiết với cập nhật theo thời gian thực
-- **Smart Runtime Calculation**: Chỉ tính thời gian từ khi thực sự bắt đầu auto-earn
+## 🎯 Features
 
-### 🔐 **Enhanced Security & Credentials**
-- **Username/Email Support**: Hỗ trợ cả username và email đăng nhập
-- **Encrypted Storage**: Mã hóa credentials với thuật toán bảo mật cao
-- **Auto-validation**: Kiểm tra và làm sạch credentials không hợp lệ
-- **Session Management**: Quản lý phiên đăng nhập thông minh
+### ✅ Core Features (Preserved from Original)
+- **Auto Login**: Secure credential storage with encryption
+- **reCAPTCHA Solver**: AI-powered audio solving with multiple servers
+- **Auto Earning**: Automated coin collection from Ateex Cloud
+- **Smart Statistics**: Real-time tracking with progress indicators
+- **Error Handling**: Intelligent error detection and recovery
+- **Browser Management**: Automatic cookie clearing and session management
 
-### 🤖 **AI-Powered reCAPTCHA Solver**
+### 🆕 Modular System Features
+- **Dynamic Module Loading**: 24-hour intelligent caching
+- **Dependency Management**: Automatic module dependency resolution
+- **Fallback Mechanisms**: Robust error handling with retries
+- **Performance Optimization**: Lazy loading and efficient resource usage
+- **Version Management**: Module versioning and update detection
 
-- **Audio Recognition**: Giải reCAPTCHA audio với độ chính xác cao
-- **Multi-Server Support**: Hệ thống server dự phòng tự động chuyển đổi
-- **Smart Retry**: Tự động thử lại khi gặp lỗi với cooldown thông minh
-- **Anti-Detection**: Bypass các hệ thống phát hiện bot
+## 🛠️ Installation Guide
 
-### 🛡️ **Error Handling & Recovery**
+### Step 1: GitHub Repository Setup
 
-- **Auto Error Detection**: Phát hiện trang lỗi (502, 500, 419) và tự động xử lý
-- **Smart Logout**: Tự động logout khi cần thiết và redirect về login
-- **Data Synchronization**: Đồng bộ dữ liệu giữa các components
-- **Graceful Recovery**: Khôi phục tự động không cần can thiệp thủ công
+1. **Create Repository**: Create a new repository: `script-auto-earn-with-coins-recaptcha-solver`
+2. **Upload Modules**: Upload all module files to `modules/` directory
+3. **Set Permissions**: Ensure repository is public or accessible
 
-### 📊 **Advanced Analytics & Management**
+### Step 2: Main Script Installation
 
-- **Comprehensive Stats**: Cycles, coins, runtime, rate, ETA với độ chính xác cao
-- **History Tracking**: Lưu trữ và phân tích lịch sử hoạt động
-- **Export/Import**: Xuất dữ liệu ra file JSON để backup
-- **Target Management**: Đặt mục tiêu và theo dõi tiến độ
-
----
-
-## 🔗 Liên kết quan trọng
-
-- 📁 **GitHub Project**: [Auto Earn with reCAPTCHA Solver](https://github.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver)
-- 🧠 **reCAPTCHA Solver Backend**: [Origami's Audio Solver](https://gist.github.com/origamiofficial/2557dd47fb0aaf08e3c298a236bfa14d)
-- ⚙️ **Tampermonkey Extension**: [tampermonkey.net](https://www.tampermonkey.net/)
-- 📖 **Documentation**: Xem file này để biết chi tiết cách sử dụng
-
----
-
-## 📥 Cài đặt & Thiết lập
-
-### Bước 1: Cài đặt Tampermonkey
-
-1. **Chrome**: [Chrome Web Store](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
-2. **Firefox**: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/)
-3. **Edge**: [Microsoft Store](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
-
-### Bước 2: Cài đặt Script
-
-1. **Tự động**: Truy cập link và click Install
-   ```
-   https://github.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/raw/main/auto-ateexcloud.js
+1. **Copy Main Script**: Copy the contents of `main.js`
+2. **Install in Tampermonkey**: Create new script and paste contents
+3. **Update URLs**: Verify the GitHub base URL matches your repository:
+   ```javascript
+   const GITHUB_BASE_URL = 'https://raw.githubusercontent.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules/';
    ```
 
-2. **Thủ công**: Copy code từ file `auto-ateexcloud.js` và paste vào Tampermonkey
+### Step 3: Configuration
 
-### Bước 3: Thiết lập lần đầu
+1. **Server Connections**: The script connects to these domains:
+   - `engageub.pythonanywhere.com`
+   - `engageub1.pythonanywhere.com`
+   - `raw.githubusercontent.com`
+   - `github.com`
 
-#### 🆕 **Two-Stage Setup Process v2.4**
+2. **Permissions**: Ensure Tampermonkey grants:
+   - `GM_xmlhttpRequest`
+   - `GM_getValue`
+   - `GM_setValue`
 
-**Phase 1: Setup (Chỉ làm 1 lần)**
+## 📊 Module Breakdown
 
-1. Truy cập [Ateex Cloud](https://dash.ateex.cloud/)
-2. Script hiển thị form **"🔐 Ateex Auto Login"**
-3. Nhập **Username/Email** (hỗ trợ cả 2 định dạng)
-4. Nhập **Password**
-5. ✅ Check **"Remember me"** để lưu credentials
-6. Click **"Save & Continue"**
+### Core Module (`core.module.js`)
+- **Global State Management**: Centralized application state
+- **Logging System**: Color-coded logging with spam prevention
+- **Utility Functions**: Helper functions for DOM, timing, and data
+- **Runtime Control**: Auto-stats enabling/disabling
+- **Browser Management**: Cookie and storage clearing
 
-**Phase 2: Runtime (Tự động hoạt động)**
+### Credentials Module (`credentials.module.js`)
+- **Secure Storage**: XOR encryption with expiration
+- **Validation**: Email/username and password validation
+- **UI Components**: Modal dialogs for credential input
+- **Error Detection**: Login failure detection and handling
+- **Session Management**: Remember credentials across sessions
 
-7. ✅ Credentials saved! Auto Stats starting...
-8. 🚀 Counter UI xuất hiện với real-time stats
-9. Script bắt đầu auto-earn cycles
-10. 📊 Theo dõi progress qua Settings menu
+### Data Module (`data.module.js`)
+- **Statistics Tracking**: Cycles, coins, runtime, and rates
+- **History Management**: Persistent statistics history (100 entries)
+- **Target Management**: User-defined coin targets with progress
+- **Server Analytics**: Server performance and latency tracking
+- **Export/Import**: JSON and CSV data export functionality
 
-#### 🔄 **Existing Users (Đã setup trước)**
+### UI Module (`ui.module.js`)
+- **Counter Display**: Real-time statistics overlay
+- **Modal System**: Unified modal components
+- **Settings Management**: Dropdown menus and configuration
+- **Progress Tracking**: Visual progress indicators
+- **Responsive Design**: Adaptive UI elements
 
-- Script tự động detect credentials cũ
-- Bỏ qua Phase 1, chuyển thẳng Phase 2
-- Tiếp tục auto-earn ngay lập tức
+### ReCAPTCHA Module (`recaptcha.module.js`)
+- **AI Integration**: Audio-to-text conversion using AI servers
+- **Server Management**: Intelligent server selection and failover
+- **Performance Tracking**: Latency and success rate monitoring
+- **Cooldown System**: Automated query rate limiting
+- **State Management**: Cross-frame communication for iframes
 
----
+### Workflow Module (`workflow.module.js`)
+- **Page Handlers**: Specialized logic for each page type
+- **State Coordination**: Cross-module state management
+- **Error Recovery**: Graceful error handling and recovery
+- **Flow Control**: Automated navigation and action sequences
+- **Session Management**: Credential verification and setup
 
-## ⚡ Hiệu suất & Thống kê v2.4
+### Error Module (`error.module.js`)
+- **Error Detection**: Pattern-based error page detection
+- **Script Control**: Emergency stop and resource cleanup
+- **Redirect Handling**: Automatic recovery from error pages
+- **Resource Tracking**: Interval and timeout management
+- **Notification System**: User notifications for critical events
 
-### ⏱️ Thời gian xử lý được tối ưu
+## 🔧 Configuration Options
 
-| Trang | Thời gian | Cải thiện |
-|-------|-----------|-----------|
-| Earn Page | ~3–5s | ⚡ Faster |
-| Login Page | ~1s đợi + ~2.5s captcha | ⚡ Faster |
-| Home Page | ~1.5s chuyển trang | ⚡ Faster |
-| **Tổng** | ~8–10s mỗi vòng lặp (**~6–7 vòng/phút**) | 🚀 **+20% faster** |
+### GitHub URL Configuration
+Update the base URL in `main.js` to match your repository:
+```javascript
+const GITHUB_BASE_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/modules/';
+```
 
-### 💰 Coin Earning Performance
+### Module Dependencies
+The dependency system automatically loads modules in the correct order:
+```
+core → [credentials, data, recaptcha, error]
+data → ui
+[core, credentials, data, ui] → workflow
+```
 
-- Mỗi vòng: **+15 coins**
-- Mỗi giờ: **~540–630 coins** (tăng 20%)
-- Đạt **1000 coins**: ~1.5–2 giờ (~67 vòng)
-- **Peak Performance**: 700+ coins/hour
-- Đạt **5000 coins**: ~8–10 giờ (~334 vòng)
-- Đạt **10000 coins**: ~16–20 giờ (~667 vòng)
+### Cache Management
+- **Duration**: 24 hours by default
+- **Storage**: localStorage with fallback mechanisms
+- **Invalidation**: Automatic cache refresh on errors
 
----
+## 📈 Performance Features
 
-## 🎛️ Tính năng chính v2.4
+### Intelligent Caching
+- **Module Caching**: 24-hour cache with version tracking
+- **Server Latency**: Cached server performance metrics
+- **Fallback Loading**: Multiple retry mechanisms
 
-### 🆕 **New Features**
+### Resource Optimization
+- **Lazy Loading**: Modules loaded only when needed
+- **Dependency Resolution**: Efficient dependency management
+- **Memory Management**: Cleanup and garbage collection
 
-| Tính năng | Mô tả | Trạng thái |
-|----------|-------|------------|
-| 🔄 **Two-Stage Startup** | Setup một lần, runtime tự động | ✅ **NEW** |
-| 🎛️ **Unified Settings Menu** | Gộp tất cả tính năng vào dropdown | ✅ **NEW** |
-| 📊 **Smart Runtime Calculation** | Chỉ tính thời gian từ khi bắt đầu auto | ✅ **NEW** |
-| 🔐 **Username/Email Support** | Hỗ trợ cả username và email login | ✅ **NEW** |
-| 🛡️ **Enhanced Error Handling** | Graceful recovery, no blocking alerts | ✅ **NEW** |
-| 📤 **Data Export/Import** | Backup và restore dữ liệu | ✅ **NEW** |
+### Network Optimization
+- **Server Selection**: Best server based on latency and success rate
+- **Request Batching**: Efficient API usage
+- **Timeout Handling**: Robust timeout and retry logic
 
-### 🔧 **Core Features**
+## 🛡️ Security Features
 
-| Tính năng | Mô tả | Cải thiện |
-|----------|-------|-----------|
-| � **Auto Earning** | Tự động vào `/earn`, thu thập coin liên tục | ⚡ **Faster** |
-| 🔐 **Auto Login** | Encrypted credentials, auto-validation | 🛡️ **Secure** |
-| 🤖 **reCAPTCHA Solver** | AI audio solver với multi-server support | 🚀 **Smarter** |
-| 📈 **Advanced Analytics** | Real-time stats, history, performance tracking | 📊 **Enhanced** |
-| ⚙️ **Target Management** | Set goals, track progress với ETA | 🎯 **Improved** |
-| 🛑 **Error Detection** | Auto detect error pages, smart recovery | 🛡️ **Robust** |
-| 🎨 **Modern UI** | Clean interface, smooth animations | ✨ **Beautiful** |
+### Credential Protection
+- **Encryption**: XOR encryption for localStorage
+- **Expiration**: 24-hour automatic expiration
+- **Validation**: Format and length validation
+- **Secure Transmission**: No credential exposure in logs
 
----
+### Data Privacy
+- **Local Storage**: All data stored locally
+- **No Tracking**: No external analytics or tracking
+- **Secure Communication**: HTTPS-only connections
+- **Permission Control**: Minimal required permissions
 
-## 🎮 Cách sử dụng Settings Menu
+## 🐛 Troubleshooting
 
-### ⚙️ **Unified Settings Menu v2.4**
+### Common Issues
 
-Click nút **"⚙️ Settings"** để truy cập:
+1. **Module Loading Failure**
+   - Check GitHub repository accessibility
+   - Verify file paths and URLs
+   - Check browser network connectivity
+   - Clear module cache: `localStorage.clear()`
 
-| Tính năng | Mô tả | Shortcut |
-|----------|-------|----------|
-| 📊 **View History** | Xem lịch sử stats và analytics | Ctrl+H |
-| 🔄 **Reset Stats** | Reset cycles/coins về 0 (giữ target) | Ctrl+R |
-| 🔐 **Clear Credentials** | Xóa thông tin đăng nhập | Ctrl+C |
-| 📤 **Export Data** | Xuất tất cả data ra JSON file | Ctrl+E |
-| 🗑️ **Clear All Data** | Reset hoàn toàn + auto reload | Ctrl+D |
+2. **reCAPTCHA Not Solving**
+   - Ensure credentials are entered
+   - Check server connectivity
+   - Verify AI server status
+   - Check console for error messages
 
-### 🎯 **Smart Actions**
+3. **Statistics Not Updating**
+   - Verify auto-stats is enabled
+   - Check localStorage permissions
+   - Ensure UI module loaded correctly
+   - Refresh page and retry
 
-- **Clear All Data từ /earn, /home**: Auto logout → reload
-- **Clear All Data từ /login**: Chỉ reload
-- **Export Data**: Tự động tạo file `ateex-data-YYYY-MM-DD.json`
-- **Reset Stats**: Restart runtime calculation từ 0
+### Debug Mode
+Enable debug logging by setting:
+```javascript
+// In browser console
+localStorage.setItem('ateex_debug', 'true');
+```
 
----
+### Cache Management
+Clear module cache if experiencing issues:
+```javascript
+// In browser console
+Object.keys(localStorage).forEach(key => {
+    if (key.startsWith('ateex_module_')) {
+        localStorage.removeItem(key);
+    }
+});
+```
 
-## ⚠️ Lưu ý quan trọng v2.4
+## 🔄 Update Process
 
-### 🔒 **Bảo mật**
-- 🔑 Credentials được mã hóa AES-256 trong localStorage
-- 🛡️ Hỗ trợ cả username và email login
-- 🔄 Auto-validation và cleanup credentials không hợp lệ
-- 🚫 Không có blocking alerts - graceful error handling
+### Module Updates
+1. Update module files in GitHub repository
+2. Clear module cache or wait 24 hours
+3. Refresh page to load new modules
 
-### 🚀 **Performance**
-- ⚡ Tối ưu hóa 20% faster so với v2.0
-- 🧠 AI reCAPTCHA solver với multi-server failover
-- 📊 Real-time stats không ảnh hưởng performance
-- 🔄 Smart retry mechanisms với exponential backoff
+### Main Script Updates
+1. Update `main.js` in Tampermonkey
+2. Clear cache if needed
+3. Test functionality
 
-### 💡 **Best Practices**
-- ⛔ Không mở nhiều tab script cùng lúc
-- � Để script chạy ổn định, tránh can thiệp thủ công
-- 💾 Thường xuyên export data để backup
-- 🎯 Set target hợp lý để theo dõi progress
+## 🤝 Contributing
 
----
+1. Fork the repository
+2. Create feature branch
+3. Make changes to modules
+4. Test thoroughly
+5. Submit pull request
 
-## 👨‍💻 Tác giả & Credits
+## 📄 License
 
-- 👤 **phmyhu_1710** (PTH Huy) - Main Developer
-- 📧 GitHub: [SmallFCraft](https://github.com/SmallFCraft)
-- 🧠 reCAPTCHA Solver: [Origami](https://gist.github.com/origamiofficial/2557dd47fb0aaf08e3c298a236bfa14d)
-- 🎨 UI/UX Design: Modern responsive interface
-- 🔧 Version 2.4: Major refactor với advanced features
+This project is licensed under the MIT License - see the LICENSE file for details.
 
----
+## ⚠️ Disclaimer
 
-## 📜 License
+This script is for educational purposes only. Use responsibly and in accordance with Ateex Cloud's terms of service. The authors are not responsible for any consequences of using this script.
 
-MIT License © 2025 - SmallFCraft
+## 🔗 Links
 
----
-
-## ⭐ Support & Feedback
-
-> 🌟 **Nếu script hữu ích, hãy star repo để ủng hộ development!**
->
-> 🐛 **Bug reports**: Tạo issue trên GitHub với log details
->
-> 💡 **Feature requests**: Welcome! Đóng góp ý tưởng qua GitHub Issues
+- **Original Script**: `auto-ateexcloud-old.js`
+- **GitHub Repository**: `https://github.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver`
+- **Issues**: Report issues in GitHub repository
+- **Documentation**: See individual module files for detailed documentation

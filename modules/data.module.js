@@ -43,7 +43,6 @@
         }
       }
 
-      logDebug(`No valid target found, using default: ${DEFAULT_TARGET_COINS}`);
       return DEFAULT_TARGET_COINS;
     } catch (e) {
       logError("Error loading target coins: " + e.message);
@@ -59,8 +58,6 @@
       // Verify the save was successful
       const verified = localStorage.getItem(TARGET_COINS_KEY);
       if (verified && parseInt(verified) === target) {
-        log(`Target coins updated to: ${target} (verified)`);
-
         // Also save to backup location for extra safety
         try {
           localStorage.setItem(TARGET_COINS_KEY + "_backup", target.toString());
@@ -117,9 +114,8 @@
       }
 
       localStorage.setItem(STATS_HISTORY_KEY, JSON.stringify(history));
-      log("Stats saved to history");
     } catch (e) {
-      log("Error saving stats to history: " + e.message);
+      logError("Error saving stats to history: " + e.message);
     }
   }
 
@@ -129,7 +125,7 @@
       const saved = localStorage.getItem(STATS_HISTORY_KEY);
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
-      log("Error loading stats history: " + e.message);
+      logError("Error loading stats history: " + e.message);
       return [];
     }
   }
@@ -150,7 +146,6 @@
         );
         return true;
       } else {
-        log("📊 No saved stats found, starting fresh");
         // Initialize with current time
         core.state.startTime = Date.now();
         return false;
@@ -172,7 +167,7 @@
     core.state.totalCoins += 15;
     core.state.lastCycleTime = Date.now();
 
-    log(
+    logSuccess(
       `Cycle ${core.state.totalCycles} completed! Total coins: ${core.state.totalCoins}`
     );
 
@@ -184,7 +179,7 @@
     // Check if target reached
     const targetCoins = getTargetCoins();
     if (core.state.totalCoins >= targetCoins) {
-      log(`🎉 Target of ${targetCoins} coins reached!`);
+      logSuccess(`🎉 Target of ${targetCoins} coins reached!`);
       saveStatsToHistory(); // Save final stats
     }
 
@@ -215,15 +210,15 @@
 
       // Check if cache is expired
       if (now - data.timestamp > LATENCY_CACHE_EXPIRY) {
-        log("Server latency cache expired, will re-test");
+        logInfo("Server latency cache expired, will re-test");
         localStorage.removeItem(SERVER_LATENCY_KEY);
         return null;
       }
 
-      log("Loaded cached server latency data");
+      logInfo("Loaded cached server latency data");
       return data.latencies;
     } catch (e) {
-      log("Error loading server latency: " + e.message);
+      logError("Error loading server latency: " + e.message);
       return null;
     }
   }
@@ -236,9 +231,8 @@
         latencies: latencies,
       };
       localStorage.setItem(SERVER_LATENCY_KEY, JSON.stringify(data));
-      logSuccess("Server latency cached successfully");
     } catch (e) {
-      log("Error saving server latency: " + e.message);
+      logError("Error saving server latency: " + e.message);
     }
   }
 
@@ -248,7 +242,7 @@
       const saved = localStorage.getItem(SERVER_STATS_KEY);
       return saved ? JSON.parse(saved) : {};
     } catch (e) {
-      log("Error loading server stats: " + e.message);
+      logError("Error loading server stats: " + e.message);
       return {};
     }
   }
@@ -286,25 +280,9 @@
         localStorage.setItem(SERVER_STATS_KEY, JSON.stringify(stats));
       }, 1000);
 
-      // Only log stats occasionally to reduce overhead
-      if (serverStat.totalRequests % 5 === 0) {
-        const successRate = (
-          (serverStat.successfulRequests / serverStat.totalRequests) *
-          100
-        ).toFixed(1);
-        const avgResponseTime =
-          serverStat.successfulRequests > 0
-            ? Math.round(
-                serverStat.totalResponseTime / serverStat.successfulRequests
-              )
-            : 0;
-
-        logDebug(
-          `Server ${serverUrl} stats: ${successRate}% success, ${avgResponseTime}ms avg, ${serverStat.failures} consecutive failures`
-        );
-      }
+      // Log stats occasionally only for debug purposes - removed to reduce spam
     } catch (e) {
-      log("Error updating server stats: " + e.message);
+      logError("Error updating server stats: " + e.message);
     }
   }
 
@@ -323,10 +301,10 @@
 
       if (resetCount > 0) {
         localStorage.setItem(SERVER_STATS_KEY, JSON.stringify(stats));
-        log(`Reset failure count for ${resetCount} servers`);
+        logInfo(`Reset failure count for ${resetCount} servers`);
       }
     } catch (e) {
-      log("Error resetting server failures: " + e.message);
+      logError("Error resetting server failures: " + e.message);
     }
   }
 
@@ -366,14 +344,14 @@
     // Check if credentials are still valid before preserving them
     const expiryTime = dataToPreserve.ateex_creds_expiry;
     if (expiryTime && Date.now() > parseInt(expiryTime)) {
-      log("Credentials expired during clear, not preserving them");
+      logInfo("Credentials expired during clear, not preserving them");
       dataToPreserve.ateex_secure_creds = null;
       dataToPreserve.ateex_creds_expiry = null;
     } else if (
       dataToPreserve.ateex_secure_creds &&
       dataToPreserve.ateex_creds_expiry
     ) {
-      log("Preserving valid credentials during browser data clear");
+      logInfo("Preserving valid credentials during browser data clear");
     }
 
     // Clear all storage
@@ -393,7 +371,7 @@
       dataToPreserve.ateex_creds_expiry
     ) {
       core.state.credentialsReady = true;
-      log("Credentials preserved and marked as ready for next cycle");
+      logInfo("Credentials preserved and marked as ready for next cycle");
     }
 
     document.cookie.split(";").forEach(c => {
@@ -430,20 +408,12 @@
     }
 
     if (preservedItems.length > 0) {
-      log(
-        `Browser data cleared, preserved ${
-          preservedItems.length
-        } items: ${preservedItems.map(([key]) => key).join(", ")}`
+      logInfo(
+        `Browser data cleared, preserved ${preservedItems.length} important items`
       );
     } else {
-      log("Browser data cleared, no items preserved");
+      logWarning("Browser data cleared, no items preserved");
     }
-
-    // Verify target coins after restore
-    setTimeout(() => {
-      const currentTarget = getTargetCoins();
-      log(`Target coins after restore: ${currentTarget}`);
-    }, 100);
   }
 
   // ============= DATA EXPORT/IMPORT =============

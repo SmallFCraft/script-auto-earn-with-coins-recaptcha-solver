@@ -25,25 +25,24 @@
   async function handleEarnPage() {
     // Check if script should be stopped
     if (window.scriptStopped) {
-      log("🛑 Earn page handler stopped - script stopped");
+      logInfo("🛑 Earn page handler stopped - script stopped");
       return;
     }
 
     // Check if auto stats is enabled
     if (!core.state.autoStatsEnabled) {
       core.logWithSpamControl(
-        "⏳ Earn page handler waiting - auto stats not enabled yet",
-        "DEBUG",
+        "⏳ Earn page waiting - auto stats not enabled",
+        "WARNING",
         "earn_page_waiting"
       );
       return;
     }
 
-    log("On earn page");
+    logInfo("📈 On earn page");
 
     try {
       // Wait 5 seconds
-      log("Waiting 5 seconds before clicking Clickcoin Start button...");
       await sleep(5000);
 
       // Find Clickcoin row accurately according to HTML structure
@@ -63,7 +62,7 @@
           'a[href*="/earn/clickcoin"]'
         );
         if (startLink) {
-          log("Found Clickcoin Start link, clicking...");
+          logSuccess("Found Clickcoin Start link, clicking...");
 
           // Ensure link opens in new tab
           startLink.setAttribute("target", "_blank");
@@ -71,17 +70,14 @@
 
           // Click link
           startLink.click();
-          log("Clickcoin Start link clicked");
 
           // Wait 7 seconds for popup ads to load and complete
-          log("Waiting 7 seconds for popup ads to load and complete...");
           await sleep(7000);
 
           // Increment cycle counter
           data.incrementCycle();
 
           // Perform logout
-          log("Performing logout...");
           ui.logout();
 
           // Wait for logout to complete before clearing data
@@ -90,36 +86,28 @@
           // Clear browser data
           await data.clearBrowserData();
         } else {
-          log("Clickcoin Start link not found");
           // Fallback: find button in row
           const startButton = clickcoinRow.querySelector("button");
           if (startButton) {
-            log("Found Clickcoin Start button, clicking...");
+            logSuccess("Found Clickcoin Start button, clicking...");
             startButton.click();
-            log("Waiting 7 seconds for popup ads to load and complete...");
             await sleep(7000); // Wait 7 seconds for popup and ads
             data.incrementCycle();
             ui.logout();
             await sleep(2000);
             await data.clearBrowserData();
           } else {
-            log("No Start button found in Clickcoin row");
+            logWarning("No Start button found in Clickcoin row");
           }
         }
       } else {
-        log("Clickcoin row not found");
+        logWarning("Clickcoin row not found");
         // Debug: log all rows
         const allRows = document.querySelectorAll("tr");
-        log(`Found ${allRows.length} rows in table`);
-        allRows.forEach((row, index) => {
-          const firstTd = row.querySelector("td");
-          if (firstTd) {
-            log(`Row ${index}: ${firstTd.textContent.trim()}`);
-          }
-        });
+        logError(`Found ${allRows.length} rows in table, but no Clickcoin row`);
       }
     } catch (error) {
-      log("Error in handleEarnPage: " + error.message);
+      logError("Error in handleEarnPage: " + error.message);
     }
   }
 
@@ -127,27 +115,27 @@
   async function handleLoginPage() {
     // Check if script should be stopped
     if (window.scriptStopped) {
-      log("🛑 Login page handler stopped - script stopped");
+      logInfo("🛑 Login page handler stopped - script stopped");
       return;
     }
 
     // Check if auto stats is enabled
     if (!core.state.autoStatsEnabled) {
       core.logWithSpamControl(
-        "⏳ Login page handler waiting - auto stats not enabled yet",
-        "DEBUG",
+        "⏳ Login page waiting - auto stats not enabled",
+        "WARNING",
         "login_page_waiting"
       );
       return;
     }
 
-    log("On login page");
+    logInfo("🔑 On login page");
 
     try {
       // Listen for messages from iframe
       window.addEventListener("message", function (event) {
         if (event.data && event.data.type === "ateex_captcha_solved") {
-          log("Received captcha solved message from iframe");
+          logSuccess("Received captcha solved message from iframe");
           core.state.captchaSolved = true;
           core.state.captchaInProgress = false;
           core.state.lastSolvedTime = event.data.timestamp;
@@ -155,25 +143,24 @@
       });
 
       // STEP 1: Ensure credentials are available FIRST
-      log("Step 1: Checking/getting credentials...");
       if (!CONFIG || !CONFIG.email || !CONFIG.password) {
-        log("No credentials available, prompting user...");
+        logInfo("Getting credentials...");
         CONFIG = await credentials.getCredentials();
 
         if (!CONFIG) {
-          log("User cancelled credential input, stopping script");
-          log("reCAPTCHA will remain blocked until credentials are provided");
+          logWarning("User cancelled credential input, stopping script");
+          logWarning(
+            "reCAPTCHA will remain blocked until credentials are provided"
+          );
           return;
         }
 
         logSuccess("Credentials obtained successfully");
-      } else {
-        logInfo("Using existing credentials");
       }
 
       // CRITICAL: Mark credentials as ready to allow reCAPTCHA
       core.state.credentialsReady = true;
-      logSuccess("Credentials ready flag set - reCAPTCHA can now proceed");
+      logSuccess("Credentials ready - reCAPTCHA can now proceed");
 
       // Notify all iframes that credentials are ready
       try {
@@ -192,9 +179,6 @@
               // Ignore cross-origin errors
             }
           });
-          logDebug(
-            `Credentials ready message sent to ${frames.length} iframes`
-          );
         }
       } catch (e) {
         logError("Error sending credentials ready message: " + e.message);
@@ -202,15 +186,9 @@
 
       // STEP 2: Wait before proceeding (5-10 seconds as requested)
       const waitTime = Math.random() * 5000 + 5000; // 5-10 seconds
-      log(
-        `Step 2: Waiting ${Math.round(
-          waitTime / 1000
-        )} seconds before auto-filling...`
-      );
       await sleep(waitTime);
 
       // STEP 3: Validate credentials (should be valid at this point)
-      log("Step 3: Validating credentials...");
       if (!CONFIG || !CONFIG.email || !CONFIG.password) {
         logWarning(
           "No valid credentials available - auto stats may not be enabled yet"
@@ -237,19 +215,14 @@
         return; // Gracefully exit, let new flow handle re-setup
       }
 
-      logSuccess("Credentials validated successfully");
-
       // STEP 4: Fill login form
-      log("Step 4: Filling login form...");
 
       // Fill email/username
       const emailInput = qSelector('input[name="email"]');
       if (emailInput) {
         emailInput.value = CONFIG.email;
         emailInput.dispatchEvent(new Event("input", { bubbles: true }));
-        logSuccess("Email filled successfully");
       } else {
-        logWarning("Email input field not found, trying alternatives...");
         // Try alternative selectors
         const altEmailInput =
           qSelector('input[type="email"]') ||
@@ -258,7 +231,6 @@
         if (altEmailInput) {
           altEmailInput.value = CONFIG.email;
           altEmailInput.dispatchEvent(new Event("input", { bubbles: true }));
-          logSuccess("Email filled using alternative selector");
         } else {
           logError("Could not find any email input field");
         }
@@ -269,9 +241,7 @@
       if (passwordInput) {
         passwordInput.value = CONFIG.password;
         passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
-        logSuccess("Password filled successfully");
       } else {
-        logWarning("Password input field not found, trying alternatives...");
         // Try alternative selectors
         const altPasswordInput =
           qSelector('input[type="password"]') ||
@@ -280,20 +250,15 @@
         if (altPasswordInput) {
           altPasswordInput.value = CONFIG.password;
           altPasswordInput.dispatchEvent(new Event("input", { bubbles: true }));
-          logSuccess("Password filled using alternative selector");
         } else {
           logError("Could not find any password input field");
         }
       }
 
-      log("Form filling completed");
-
       // STEP 5: Handle reCAPTCHA (only after form is filled)
-      log("Step 5: Handling reCAPTCHA...");
-
       // Check if captcha was already solved in iframe
       if (core.state.captchaSolved) {
-        log("reCAPTCHA already solved in iframe, proceeding with login");
+        logSuccess("reCAPTCHA already solved, proceeding with login");
       } else {
         // Look for reCAPTCHA element
         const recaptchaElement =
@@ -303,14 +268,13 @@
           qSelector('iframe[src*="recaptcha"]');
 
         if (recaptchaElement) {
-          log("Found reCAPTCHA element, starting solver...");
+          logInfo("Found reCAPTCHA element, waiting for solver...");
           core.state.captchaInProgress = true;
 
           // Wait for reCAPTCHA to be solved (60 seconds timeout)
           let captchaWaitTime = 0;
           const maxCaptchaWait = 60000;
 
-          log("Waiting for reCAPTCHA to be solved...");
           while (
             !core.state.captchaSolved &&
             captchaWaitTime < maxCaptchaWait
@@ -320,40 +284,40 @@
 
             // Check global state
             if (core.state.captchaSolved) {
-              log("reCAPTCHA solved by iframe!");
+              logSuccess("reCAPTCHA solved by iframe!");
               break;
             }
 
-            // Log progress every 10 seconds
-            if (captchaWaitTime % 10000 === 0) {
-              log(
+            // Log progress every 20 seconds to reduce spam
+            if (captchaWaitTime % 20000 === 0) {
+              core.logWithSpamControl(
                 `Still waiting for reCAPTCHA... ${
                   captchaWaitTime / 1000
-                }s elapsed`
+                }s elapsed`,
+                "INFO",
+                "captcha_wait_progress"
               );
             }
           }
 
           if (core.state.captchaSolved) {
-            log("reCAPTCHA solved successfully, proceeding with login");
+            logSuccess("reCAPTCHA solved successfully, proceeding with login");
             // Wait 2 seconds before submitting
             await sleep(2000);
           } else {
-            log(
+            logWarning(
               "reCAPTCHA not solved within timeout period, attempting login anyway"
             );
           }
         } else {
-          log("No reCAPTCHA found on page, proceeding with login");
+          logInfo("No reCAPTCHA found on page, proceeding with login");
         }
       }
 
       // STEP 6: Submit form and monitor result
-      log("Step 6: Submitting login form...");
-
       const loginForm = qSelector('form[action*="login"]') || qSelector("form");
       if (loginForm) {
-        log("Submitting login form");
+        logInfo("Submitting login form");
         loginForm.submit();
         // Start monitoring for login result
         setTimeout(credentials.monitorLoginResult, 1000);
@@ -364,18 +328,18 @@
           qSelector('button[class*="login"]') ||
           qSelector('button[id*="login"]');
         if (signInButton) {
-          log("Clicking sign in button");
+          logInfo("Clicking sign in button");
           signInButton.click();
           // Start monitoring for login result
           setTimeout(credentials.monitorLoginResult, 1000);
         } else {
-          log("ERROR: No login form or submit button found");
+          logError("No login form or submit button found");
         }
       }
 
-      log("Login process completed, monitoring result...");
+      logSuccess("Login process completed, monitoring result...");
     } catch (error) {
-      log("Error in handleLoginPage: " + error.message);
+      logError("Error in handleLoginPage: " + error.message);
     }
   }
 
@@ -383,43 +347,38 @@
   async function handleHomePage() {
     // Check if script should be stopped
     if (window.scriptStopped) {
-      log("🛑 Home page handler stopped - script stopped");
+      logInfo("🛑 Home page handler stopped - script stopped");
       return;
     }
 
     // Check if auto stats is enabled
     if (!core.state.autoStatsEnabled) {
       core.logWithSpamControl(
-        "⏳ Home page handler waiting - auto stats not enabled yet",
-        "DEBUG",
+        "⏳ Home page waiting - auto stats not enabled",
+        "WARNING",
         "home_page_waiting"
       );
       return;
     }
 
-    log("On home page");
+    logInfo("🏠 On home page");
 
     try {
       // Wait 2-4 seconds as requested
       const waitTime = Math.random() * 2000 + 2000; // 2-4 seconds
-      log(
-        `Waiting ${Math.round(
-          waitTime / 1000
-        )} seconds before redirecting to earn page...`
-      );
       await sleep(waitTime);
 
       // Navigate to earn page
-      log("Redirecting to earn page");
+      logInfo("Redirecting to earn page");
       window.location.href = "https://dash.ateex.cloud/earn";
     } catch (error) {
-      log("Error in handleHomePage: " + error.message);
+      logError("Error in handleHomePage: " + error.message);
     }
   }
 
   // Handle logout page
   async function handleLogoutPage() {
-    log("On logout page, clearing data and redirecting to login");
+    logInfo("🔓 On logout page, clearing data and redirecting to login");
     await data.clearBrowserData();
     setTimeout(() => {
       window.location.href = "https://dash.ateex.cloud/login";
@@ -428,9 +387,9 @@
 
   // Handle popup/ads pages
   function handlePopupPage() {
-    log("Detected ads/popup page, will auto-close");
+    logInfo("📺 Detected ads/popup page, will auto-close");
     setTimeout(() => {
-      log("Auto-closing ads page");
+      logInfo("Auto-closing ads page");
       window.close();
     }, Math.random() * 5000 + 8000); // 8-13 seconds
   }
@@ -441,28 +400,28 @@
     const currentPath = window.location.pathname;
     const currentUrl = window.location.href;
 
-    log(`Current path: ${currentPath}`);
-    log(`Current URL: ${currentUrl}`);
-
     // Handle reCAPTCHA iframe separately - NO UI creation
     if (currentUrl.includes("recaptcha")) {
-      log("Detected reCAPTCHA iframe");
+      logInfo("🔄 Detected reCAPTCHA iframe");
 
       // Listen for credentials ready message from parent (with spam prevention)
       let lastCredentialsMessage = 0;
       window.addEventListener("message", function (event) {
         if (event.data && event.data.type === "ateex_credentials_ready") {
           const now = Date.now();
-          // Only log once every 30 seconds to prevent spam
-          if (now - lastCredentialsMessage > 30000) {
-            log("Received credentials ready message from parent window");
+          // Only log once every 60 seconds to prevent spam
+          if (now - lastCredentialsMessage > 60000) {
+            core.logWithSpamControl(
+              "Received credentials ready message from parent window",
+              "INFO",
+              "credentials_ready_message"
+            );
             lastCredentialsMessage = now;
           }
           core.state.credentialsReady = true;
         }
       });
 
-      log("Checking credentials before allowing reCAPTCHA solver...");
       recaptcha.initCaptchaSolver();
       return; // Only handle captcha, nothing else
     }
@@ -471,18 +430,13 @@
     if (window.top === window.self) {
       // Check auto stats state first (backward compatibility + new flow)
       const autoStatsWasEnabled = core.checkAutoStatsState();
-      logInfo(
-        `🔍 Auto stats check result: ${
-          autoStatsWasEnabled ? "ENABLED" : "DISABLED"
-        }`
-      );
 
       // Check if credentials already exist and set flag
       const existingCreds = credentials.loadCredentials();
       if (existingCreds && existingCreds.email && existingCreds.password) {
         CONFIG = existingCreds;
         core.state.credentialsReady = true;
-        log("Existing credentials found and loaded - reCAPTCHA allowed");
+        logSuccess("Existing credentials found and loaded");
 
         // Notify iframes that credentials are ready
         setTimeout(() => {
@@ -501,9 +455,6 @@
                   // Ignore cross-origin errors
                 }
               });
-              logDebug(
-                `Existing credentials message sent to ${frames.length} iframes`
-              );
             }
           } catch (e) {
             logError(
@@ -532,8 +483,6 @@
                     // Ignore cross-origin errors
                   }
                 });
-
-                logDebug(`Sent credentials ready to ${frames.length} iframes`);
               } catch (e) {
                 // Ignore errors
               }
@@ -551,22 +500,18 @@
         ui.createCounterUI();
         // Force immediate update to show loaded data
         ui.updateCounter();
-        logInfo("🚀 Auto Stats runtime active - UI created");
+        logSuccess("🚀 Auto Stats runtime active - UI created");
       } else {
-        logInfo("⏳ Auto Stats waiting for setup - prompting for credentials");
-
         // For new users, immediately prompt for credentials
         setTimeout(async () => {
           try {
-            logInfo("🔐 Prompting new user for credentials...");
+            logInfo("🔐 Setting up credentials...");
             const newCredentials = await credentials.getCredentials();
 
             if (newCredentials) {
               CONFIG = newCredentials;
               core.state.credentialsReady = true;
-              logSuccess(
-                "✅ Credentials obtained - Auto Stats should now be enabled"
-              );
+              logSuccess("✅ Credentials obtained - Auto Stats enabled");
 
               // Notify iframes that credentials are ready
               const message = {
@@ -597,12 +542,6 @@
         }, 2000); // Wait 2 seconds for page to fully load
       }
 
-      if (core.PERFORMANCE_MODE) {
-        logWarning(
-          "Performance Mode ENABLED - Some features disabled for maximum speed"
-        );
-      }
-
       // Update counter more frequently for better UX
       setInterval(ui.updateCounter, 2000); // Update every 2 seconds instead of 10
     }
@@ -631,9 +570,8 @@
     } else if (currentPath.includes("/home") || currentPath === "/") {
       // Always try to handle home page (it has its own guards)
       handleHomePage();
-    } else {
-      log("Unknown page, no action taken");
     }
+    // Removed unknown page log to reduce spam
   }
 
   // ============= EXPORTS =============

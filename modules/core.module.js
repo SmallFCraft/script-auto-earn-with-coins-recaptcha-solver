@@ -257,7 +257,7 @@
         window.ateexGlobalState.startTime =
           window.ateexGlobalState.autoStatsStartTime;
 
-        logInfo("📊 Auto Stats state restored from previous session");
+        logSuccess("📊 Auto Stats restored from previous session");
         return true;
       }
 
@@ -272,7 +272,7 @@
 
   async function clearGoogleCookies(shouldReload = false) {
     try {
-      log("Deep clearing ALL Google storage to reset reCAPTCHA limits...");
+      logWarning("Clearing Google storage to reset reCAPTCHA limits...");
       const googleCookieNames = [
         "NID",
         "1P_JAR",
@@ -339,7 +339,7 @@
           }
         });
       } catch (e) {
-        log("Storage clearing error: " + e.message);
+        // Silent error
       }
 
       // Clear IndexedDB
@@ -355,12 +355,11 @@
                 db.name.includes("analytics"))
             ) {
               indexedDB.deleteDatabase(db.name);
-              log(`Deleted IndexedDB: ${db.name}`);
             }
           }
         }
       } catch (e) {
-        log("IndexedDB clearing error: " + e.message);
+        // Silent error
       }
 
       // Clear caches
@@ -375,12 +374,11 @@
               cacheName.includes("analytics")
             ) {
               await caches.delete(cacheName);
-              log(`Deleted cache: ${cacheName}`);
             }
           }
         }
       } catch (e) {
-        log("Cache clearing error: " + e.message);
+        // Silent error
       }
 
       // Unregister service workers
@@ -394,19 +392,18 @@
               registration.scope.includes("recaptcha")
             ) {
               await registration.unregister();
-              log(`Unregistered SW: ${registration.scope}`);
             }
           }
         }
       } catch (e) {
-        log("Service Worker clearing error: " + e.message);
+        // Silent error
       }
 
-      log("Deep Google storage clearing completed successfully");
+      logSuccess("Google storage cleared successfully");
 
       if (shouldReload) {
         setTimeout(() => {
-          log("Reloading page to reset reCAPTCHA state...");
+          logInfo("Reloading page to reset reCAPTCHA state...");
 
           if (window.top !== window.self) {
             try {
@@ -417,7 +414,6 @@
                 },
                 "*"
               );
-              log("Sent reload request to parent window");
             } catch (e) {
               try {
                 window.top.location.reload();
@@ -431,15 +427,13 @@
         }, 2000);
       }
     } catch (error) {
-      log("Error clearing Google cookies: " + error.message);
+      logError("Error clearing Google cookies: " + error.message);
     }
   }
 
   // ============= MODULE INITIALIZATION =============
 
   async function initialize() {
-    logInfo("[Core Module] Initializing...");
-
     // Check auto stats state
     checkAutoStatsState();
 
@@ -447,18 +441,16 @@
     if (window.top === window.self) {
       window.addEventListener("message", function (event) {
         if (event.data && event.data.type === "ateex_reload_required") {
-          log(`Received reload request: ${event.data.reason}`);
+          logInfo(`Received reload request: ${event.data.reason}`);
           setTimeout(() => {
-            log("Reloading main page as requested");
+            logInfo("Reloading main page as requested");
             window.location.reload();
           }, 1000);
         }
       });
-
-      log("Message listeners setup completed");
     }
 
-    logSuccess("[Core Module] Initialization completed");
+    logSuccess("[Core Module] Initialized");
   }
 
   // ============= EXPORTS =============

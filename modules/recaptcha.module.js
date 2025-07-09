@@ -68,10 +68,8 @@
       if (statusElement) {
         recaptchaInitialStatus = statusElement.innerText || "";
       }
-
-      log("Recaptcha Language is " + recaptchaLanguage);
     } catch (err) {
-      log("Error initializing recaptcha vars: " + err.message);
+      logError("Error initializing recaptcha vars: " + err.message);
     }
   }
 
@@ -92,15 +90,11 @@
 
         // Skip excluded servers
         if (excludeServers.includes(server)) {
-          log(`Skipping excluded server: ${server}`);
           continue;
         }
 
         // Skip servers with too many consecutive failures (but allow if no other options)
         if (serverStat && serverStat.failures >= 3) {
-          log(
-            `Server ${server} has ${serverStat.failures} consecutive failures`
-          );
           // Don't skip completely, just lower priority
         }
 
@@ -130,12 +124,6 @@
           failures: serverStat?.failures || 0,
         });
 
-        log(
-          `Server ${server}: latency=${latency}ms, failures=${
-            serverStat?.failures || 0
-          }, score=${Math.round(score)}`
-        );
-
         if (score > bestScore) {
           bestScore = score;
           bestServer = server;
@@ -144,7 +132,7 @@
 
       // If no server found (all excluded), use fallback
       if (!bestServer && availableServers.length === 0) {
-        log("No available servers, using fallback to first server");
+        logWarning("No available servers, using fallback to first server");
         return serversList[0];
       }
 
@@ -152,7 +140,7 @@
       if (bestServer) {
         const bestServerStat = stats[bestServer];
         if (bestServerStat && bestServerStat.failures >= 5) {
-          log(
+          logWarning(
             `Best server ${bestServer} has too many failures (${bestServerStat.failures}), trying fallback`
           );
 
@@ -160,19 +148,16 @@
           availableServers.sort((a, b) => b.score - a.score);
           for (const serverInfo of availableServers) {
             if (serverInfo.server !== bestServer && serverInfo.failures < 5) {
-              log(`Fallback to server: ${serverInfo.server}`);
+              logInfo(`Fallback to server: ${serverInfo.server}`);
               return serverInfo.server;
             }
           }
         }
       }
 
-      log(
-        `Best server selected: ${bestServer} (score: ${Math.round(bestScore)})`
-      );
       return bestServer || serversList[0];
     } catch (e) {
-      log("Error selecting best server: " + e.message);
+      logError("Error selecting best server: " + e.message);
       return serversList[0]; // Fallback to first server
     }
   }
@@ -187,13 +172,11 @@
     URL = URL.replace("recaptcha.net", "google.com");
 
     if (recaptchaLanguage.length < 1) {
-      log("Recaptcha Language is not recognized");
+      logWarning("Recaptcha Language is not recognized");
       recaptchaLanguage = "en-US";
     }
 
-    log(
-      `Solving reCAPTCHA with audio using server: ${url} (Language: ${recaptchaLanguage})`
-    );
+    logInfo(`Solving reCAPTCHA with audio using server: ${url}`);
 
     const requestStart = Date.now();
 
@@ -207,9 +190,6 @@
       timeout: 60000,
       onload: function (response) {
         const responseTime = Date.now() - requestStart;
-        log(
-          `Response from ${url} (${responseTime}ms): ${response.responseText}`
-        );
 
         try {
           if (response && response.responseText) {
@@ -223,7 +203,11 @@
               responseText.length > 50
             ) {
               // Invalid Response, Reload the captcha
-              log("Invalid Response. Retrying..");
+              core.logWithSpamControl(
+                "Invalid Response. Retrying..",
+                "WARNING",
+                "invalid_response"
+              );
               data.updateServerStats(url, false, responseTime);
             } else if (
               qSelector(AUDIO_SOURCE) &&
@@ -239,25 +223,29 @@
               logSuccess("reCAPTCHA solved successfully!");
               data.updateServerStats(url, true, responseTime);
             } else {
-              log("Could not locate text input box");
+              core.logWithSpamControl(
+                "Could not locate text input box",
+                "WARNING",
+                "input_box_error"
+              );
               data.updateServerStats(url, false, responseTime);
             }
             waitingForAudioResponse = false;
           }
         } catch (err) {
-          log("Exception handling response. Retrying..: " + err.message);
+          logError("Exception handling response. Retrying..: " + err.message);
           data.updateServerStats(url, false, responseTime);
           waitingForAudioResponse = false;
         }
       },
       onerror: function (e) {
         const responseTime = Date.now() - requestStart;
-        log(`reCAPTCHA solver error from ${url}: ${e}`);
+        logError(`reCAPTCHA solver error from ${url}: ${e}`);
         data.updateServerStats(url, false, responseTime);
         waitingForAudioResponse = false;
       },
       ontimeout: function () {
-        log(`Response Timed out from ${url}. Retrying..`);
+        logWarning(`Response Timed out from ${url}. Retrying..`);
         data.updateServerStats(url, false, 60000); // Use timeout value
         waitingForAudioResponse = false;
       },
@@ -268,7 +256,6 @@
 
   async function pingTest(url) {
     var start = new Date().getTime();
-    log(`Pinging server: ${url}`);
 
     GM_xmlhttpRequest({
       method: "GET",
@@ -287,14 +274,17 @@
           for (let i = 0; i < serversList.length; i++) {
             if (url == serversList[i]) {
               latencyList[i] = milliseconds;
-              log(`Server ${url} ping: ${milliseconds}ms (success)`);
             }
           }
 
           // Update server stats
           data.updateServerStats(url, true, milliseconds);
         } else {
-          log(`Server ${url} ping failed: invalid response`);
+          core.logWithSpamControl(
+            `Server ${url} ping failed: invalid response`,
+            "WARNING",
+            "ping_failed"
+          );
           data.updateServerStats(url, false, milliseconds);
         }
 
@@ -304,11 +294,15 @@
       onerror: function (e) {
         var end = new Date().getTime();
         var milliseconds = end - start;
-        log(`Ping test error for ${url}: ${e}`);
+        logError(`Ping test error for ${url}: ${e}`);
         data.updateServerStats(url, false, milliseconds);
       },
       ontimeout: function () {
-        log(`Ping Test Response Timed out for ${url}`);
+        core.logWithSpamControl(
+          `Ping Test Response Timed out for ${url}`,
+          "WARNING",
+          "ping_timeout"
+        );
         data.updateServerStats(url, false, 8000); // Use timeout value
       },
     });
@@ -331,13 +325,12 @@
           credentialsReady = true;
           // Sync the flag to local state
           core.state.credentialsReady = true;
-          log("Credentials ready flag synced from parent window");
         }
       } catch (e) {
         // Cross-origin access might be blocked, use message passing
         core.logWithSpamControl(
           "Cannot access parent window directly, checking via message...",
-          "DEBUG",
+          "WARNING",
           "parent_access_blocked"
         );
       }
@@ -346,7 +339,7 @@
     if (!credentialsReady) {
       core.logWithSpamControl(
         "reCAPTCHA blocked: Credentials not ready yet. Waiting...",
-        "DEBUG",
+        "WARNING",
         "recaptcha_blocked"
       );
 
@@ -357,11 +350,8 @@
       return;
     }
 
-    log("Credentials ready - proceeding with reCAPTCHA solver");
-
     // Check if captcha already solved
     if (core.state.captchaSolved) {
-      log("reCAPTCHA already solved, skipping solver initialization");
       return;
     }
 
@@ -375,7 +365,11 @@
         const remainingTime = Math.ceil(
           (cooldownPeriod - timeSinceLastError) / 1000
         );
-        log(`Cooldown active, waiting ${remainingTime}s before retry`);
+        core.logWithSpamControl(
+          `Cooldown active, waiting ${remainingTime}s before retry`,
+          "WARNING",
+          "captcha_cooldown"
+        );
 
         setTimeout(() => {
           initCaptchaSolver();
@@ -386,7 +380,11 @@
 
     // Check if solver already running
     if (core.state.captchaInProgress && captchaInterval) {
-      log("reCAPTCHA solver already in progress, skipping");
+      core.logWithSpamControl(
+        "reCAPTCHA solver already in progress, skipping",
+        "INFO",
+        "solver_in_progress"
+      );
       return;
     }
 
@@ -397,9 +395,7 @@
     const cachedLatency = data.loadServerLatency();
     if (cachedLatency && cachedLatency.length === serversList.length) {
       latencyList = cachedLatency;
-      log("Using cached server latency data");
-    } else {
-      log("No valid cached latency, will ping servers");
+      logInfo("Using cached server latency data");
     }
 
     // Mark as in progress
@@ -411,12 +407,10 @@
     } else if (window.location.href.includes("bframe")) {
       // Only ping if we don't have cached data or it's expired
       if (!cachedLatency) {
-        log("Pinging servers to determine best latency...");
+        logInfo("Pinging servers to determine best latency...");
         for (let i = 0; i < serversList.length; i++) {
           pingTest(serversList[i]);
         }
-      } else {
-        log("Using cached latency, skipping ping tests");
       }
     }
 
@@ -462,10 +456,9 @@
                 },
                 "*"
               );
-              log("Notified parent window about captcha solution");
             }
           } catch (e) {
-            log("Could not notify parent window: " + e.message);
+            // Silent error - not critical
           }
 
           // Trigger custom event to notify login page
@@ -477,7 +470,7 @@
         }
 
         if (requestCount > MAX_ATTEMPTS) {
-          log("Attempted Max Retries. Stopping the solver");
+          logWarning("Attempted Max Retries. Stopping the solver");
           solved = true;
           core.state.captchaInProgress = false;
           clearInterval(captchaInterval);
@@ -529,9 +522,7 @@
           qSelector(DOSCAPTCHA) &&
           qSelector(DOSCAPTCHA).innerText.length > 0
         ) {
-          log(
-            "Automated Queries Detected - clearing storage and implementing cooldown"
-          );
+          logWarning("Automated Queries Detected - clearing storage and implementing cooldown");
 
           // Clear Google cookies and reload to reset limits
           await core.clearGoogleCookies(true);
@@ -545,9 +536,7 @@
           // No need for setTimeout since we'll reload the page
         }
       } catch (err) {
-        log(
-          "An error occurred while solving. Stopping the solver: " + err.message
-        );
+        logError("An error occurred while solving. Stopping the solver: " + err.message);
         core.state.captchaInProgress = false;
         clearInterval(captchaInterval);
       }
