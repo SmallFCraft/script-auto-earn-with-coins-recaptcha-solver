@@ -1,16 +1,13 @@
 // ==UserScript==
-// @name         Ateex Cloud Auto Script - Modular
+// @name         Ateex Cloud Auto Script - Modular (Performance Optimized)
 // @namespace    http://tampermonkey.net/
-// @version      3.1.2
-// @description  Modular auto script for Ateex Cloud with dynamic module loading
+// @version      3.2.0
+// @description  Optimized auto script for Ateex Cloud with enhanced performance
 // @author       phmyhu_1710
 // @match        https://dash.ateex.cloud/*
 // @match        *://*/recaptcha/*
 // @connect      engageub.pythonanywhere.com
 // @connect      engageub1.pythonanywhere.com
-// @connect      raw.githubusercontent.com
-// @connect      github.com
-// @connect      ipv4.webshare.io
 // @connect      httpbin.org
 // @connect      *
 // @grant        GM_xmlhttpRequest
@@ -22,432 +19,250 @@
 (function () {
   "use strict";
 
-  // Prevent multiple instances
+  // Prevent multiple instances - enhanced check
   if (window.ateexModularRunning) {
-    console.log("[Ateex Modular] Script already running, skipping...");
     return;
   }
   window.ateexModularRunning = true;
 
-  // ============= MODULE LOADER CONFIGURATION =============
-  const SOURCE_URLS = [
-    "https://raw.githubusercontent.com/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules/",
-    "https://cdn.jsdelivr.net/gh/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver@main/modules/",
-    "https://gitcdn.xyz/repo/SmallFCraft/script-auto-earn-with-coins-recaptcha-solver/main/modules/",
-  ];
-  const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days (extended)
-  const CACHE_PREFIX = "ateex_module_";
-  const VERSION = "3.1.2";
+  // ============= PERFORMANCE OPTIMIZED MODULE SYSTEM =============
 
-  // Module definitions with dependencies
-  const MODULES = {
-    core: {
-      url: "core.module.js",
-      dependencies: [],
-      required: true,
-    },
-    credentials: {
-      url: "credentials.module.js",
-      dependencies: ["core"],
-      required: true,
-    },
-    data: {
-      url: "data.module.js",
-      dependencies: ["core"],
-      required: true,
-    },
-    proxy: {
-      url: "proxy.module.js",
-      dependencies: ["core"],
-      required: true,
-    },
-    ui: {
-      url: "ui.module.js",
-      dependencies: ["core", "data"],
-      required: true,
-    },
-    recaptcha: {
-      url: "recaptcha.module.js",
-      dependencies: ["core", "data", "proxy"],
-      required: true,
-    },
-    workflow: {
-      url: "workflow.module.js",
-      dependencies: ["core", "credentials", "data", "ui", "recaptcha"],
-      required: true,
-    },
-  };
-
-  // Global module storage
+  // Optimized global module registry
   window.AteexModules = window.AteexModules || {};
 
-  // ============= MODULE LOADER SYSTEM =============
-  class ModuleLoader {
-    constructor() {
-      this.loadedModules = new Set();
-      this.loadingPromises = new Map();
-      this.retryCount = new Map();
-      this.maxRetries = 3;
-    }
+  // Module loading state
+  const moduleState = {
+    loadedModules: new Set(),
+    totalModules: 7,
+    startTime: Date.now(),
+  };
 
-    // Get cached module
-    getCachedModule(moduleName) {
-      try {
-        const cacheKey = CACHE_PREFIX + moduleName;
-        const cached = localStorage.getItem(cacheKey);
+  // Optimized module URLs - reduced redundancy
+  const MODULE_BASE_URL =
+    "https://raw.githubusercontent.com/phmyhu/auto-ateexcloud/main/modules/";
+  const MODULES = [
+    { name: "core", file: "core.module.js" },
+    { name: "credentials", file: "credentials.module.js" },
+    { name: "data", file: "data.module.js" },
+    { name: "proxy", file: "proxy.module.js" },
+    { name: "recaptcha", file: "recaptcha.module.js" },
+    { name: "ui", file: "ui.module.js" },
+    { name: "workflow", file: "workflow.module.js" },
+  ];
 
-        if (!cached) return null;
+  // Quick dependency mapping for loading order
+  const MODULE_DEPS = {
+    core: [],
+    data: ["core"],
+    credentials: ["core"],
+    proxy: ["core"],
+    ui: ["core", "data"],
+    recaptcha: ["core", "data", "proxy"],
+    workflow: ["core", "credentials", "data", "ui", "recaptcha", "proxy"],
+  };
 
-        const data = JSON.parse(cached);
-        const now = Date.now();
+  // ============= OPTIMIZED MODULE LOADER =============
 
-        // Check if cache is expired
-        if (now - data.timestamp > CACHE_DURATION) {
-          localStorage.removeItem(cacheKey);
-          return null;
-        }
-
-        console.log(`[Module Loader] Using cached module: ${moduleName}`);
-        return data.code;
-      } catch (e) {
-        console.error(`[Module Loader] Cache error for ${moduleName}:`, e);
-        return null;
-      }
-    }
-
-    // Save module to cache
-    cacheModule(moduleName, code) {
-      try {
-        const cacheKey = CACHE_PREFIX + moduleName;
-        const data = {
-          code: code,
-          timestamp: Date.now(),
-          version: VERSION,
-        };
-        localStorage.setItem(cacheKey, JSON.stringify(data));
-        console.log(`[Module Loader] Cached module: ${moduleName}`);
-      } catch (e) {
-        console.error(`[Module Loader] Failed to cache ${moduleName}:`, e);
-      }
-    }
-
-    // Fetch module with fallback sources
-    async fetchModule(moduleName) {
-      const moduleConfig = MODULES[moduleName];
-      if (!moduleConfig) {
-        throw new Error(`Unknown module: ${moduleName}`);
-      }
-
-      let lastError = null;
-
-      // Try each source URL until one succeeds
-      for (let i = 0; i < SOURCE_URLS.length; i++) {
-        const baseUrl = SOURCE_URLS[i];
-        const url = baseUrl + moduleConfig.url;
-
-        console.log(
-          `[Module Loader] Attempting source ${i + 1}/${
-            SOURCE_URLS.length
-          }: ${url}`
-        );
-
-        try {
-          const code = await this._fetchFromUrl(url);
-          console.log(
-            `[Module Loader] Successfully fetched from source ${i + 1}`
-          );
-          return code;
-        } catch (error) {
-          lastError = error;
-          console.warn(
-            `[Module Loader] Source ${i + 1} failed:`,
-            error.message
-          );
-
-          // If not the last source, continue to next
-          if (i < SOURCE_URLS.length - 1) {
-            console.log(`[Module Loader] Trying next source...`);
-            continue;
-          }
-        }
-      }
-
-      // All sources failed
-      throw new Error(
-        `Failed to fetch module ${moduleName} from all sources. Last error: ${lastError?.message}`
+  function loadModule(moduleInfo) {
+    return new Promise((resolve, reject) => {
+      // Quick dependency check
+      const missingDeps = MODULE_DEPS[moduleInfo.name].filter(
+        dep => !moduleState.loadedModules.has(dep)
       );
-    }
 
-    // Helper method to fetch from a single URL
-    async _fetchFromUrl(url) {
-      return new Promise((resolve, reject) => {
-        GM_xmlhttpRequest({
-          method: "GET",
-          url: url,
-          timeout: 15000, // Reduced timeout for faster fallback
-          onload: response => {
-            if (response.status === 200) {
-              resolve(response.responseText);
-            } else {
-              reject(
-                new Error(`HTTP ${response.status}: ${response.statusText}`)
-              );
+      if (missingDeps.length > 0) {
+        reject(new Error(`Missing dependencies: ${missingDeps.join(", ")}`));
+        return;
+      }
+
+      const script = document.createElement("script");
+      const moduleUrl = MODULE_BASE_URL + moduleInfo.file;
+
+      // Quick module wrapper
+      const moduleWrapper = `
+        (function() {
+          const exports = {};
+          ${
+            moduleInfo.name === "core"
+              ? "window.AteexModules = window.AteexModules || {};"
+              : ""
+          }
+          try {
+            // MODULE CODE WILL BE INSERTED HERE
+            ${
+              moduleInfo.name === "core"
+                ? "window.AteexModules.core = exports;"
+                : ""
             }
-          },
-          onerror: error => {
-            reject(new Error(`Network error: ${error}`));
-          },
-          ontimeout: () => {
-            reject(new Error("Request timeout"));
-          },
-        });
-      });
-    }
-
-    // Execute module code
-    executeModule(moduleName, code) {
-      try {
-        console.log(`[Module Loader] Executing module: ${moduleName}`);
-
-        // Create module context
-        const moduleContext = {
-          exports: {},
-          AteexModules: window.AteexModules,
-          GM_xmlhttpRequest: GM_xmlhttpRequest,
-          GM_getValue: GM_getValue,
-          GM_setValue: GM_setValue,
-          window: window,
-          document: document,
-          console: console,
-          localStorage: localStorage,
-          sessionStorage: sessionStorage,
-        };
-
-        // Execute module code in context
-        const moduleFunction = new Function(
-          "module",
-          "exports",
-          "AteexModules",
-          "GM_xmlhttpRequest",
-          "GM_getValue",
-          "GM_setValue",
-          "window",
-          "document",
-          "console",
-          "localStorage",
-          "sessionStorage",
-          code + "\n//# sourceURL=ateex-module-" + moduleName + ".js"
-        );
-
-        moduleFunction.call(
-          moduleContext,
-          moduleContext,
-          moduleContext.exports,
-          window.AteexModules,
-          GM_xmlhttpRequest,
-          GM_getValue,
-          GM_setValue,
-          window,
-          document,
-          console,
-          localStorage,
-          sessionStorage
-        );
-
-        // Store module exports
-        window.AteexModules[moduleName] = moduleContext.exports;
-        console.log(
-          `[Module Loader] Module loaded successfully: ${moduleName}`
-        );
-
-        return moduleContext.exports;
-      } catch (e) {
-        console.error(
-          `[Module Loader] Failed to execute module ${moduleName}:`,
-          e
-        );
-        throw e;
-      }
-    }
-
-    // Load a single module
-    async loadModule(moduleName) {
-      // Check if already loaded
-      if (this.loadedModules.has(moduleName)) {
-        return window.AteexModules[moduleName];
-      }
-
-      // Check if already loading
-      if (this.loadingPromises.has(moduleName)) {
-        return this.loadingPromises.get(moduleName);
-      }
-
-      // Create loading promise
-      const loadingPromise = this._loadModuleInternal(moduleName);
-      this.loadingPromises.set(moduleName, loadingPromise);
-
-      try {
-        const result = await loadingPromise;
-        this.loadedModules.add(moduleName);
-        this.loadingPromises.delete(moduleName);
-        return result;
-      } catch (e) {
-        this.loadingPromises.delete(moduleName);
-        throw e;
-      }
-    }
-
-    // Internal module loading logic
-    async _loadModuleInternal(moduleName) {
-      const moduleConfig = MODULES[moduleName];
-      if (!moduleConfig) {
-        throw new Error(`Unknown module: ${moduleName}`);
-      }
-
-      // Load dependencies first
-      for (const dep of moduleConfig.dependencies) {
-        await this.loadModule(dep);
-      }
-
-      // Try to get from cache first
-      let code = this.getCachedModule(moduleName);
-
-      // If not cached or cache failed, fetch from GitHub
-      if (!code) {
-        const retries = this.retryCount.get(moduleName) || 0;
-
-        try {
-          code = await this.fetchModule(moduleName);
-          this.cacheModule(moduleName, code);
-          this.retryCount.delete(moduleName);
-        } catch (e) {
-          console.error(`[Module Loader] Failed to fetch ${moduleName}:`, e);
-
-          if (retries < this.maxRetries) {
-            this.retryCount.set(moduleName, retries + 1);
-            console.log(
-              `[Module Loader] Retrying ${moduleName} (${retries + 1}/${
-                this.maxRetries
-              })...`
-            );
-            await new Promise(resolve =>
-              setTimeout(resolve, 2000 * (retries + 1))
-            );
-            return this._loadModuleInternal(moduleName);
+            ${
+              moduleInfo.name !== "core"
+                ? `window.AteexModules.${moduleInfo.name} = exports;`
+                : ""
+            }
+            console.log("✅ Module loaded: ${moduleInfo.name}");
+          } catch (error) {
+            console.error("❌ Module error: ${moduleInfo.name}", error);
+            throw error;
           }
+        })();
+      `;
 
-          throw new Error(
-            `Failed to load module ${moduleName} after ${this.maxRetries} attempts`
-          );
-        }
-      }
+      // Quick error handling
+      script.onerror = () =>
+        reject(new Error(`Failed to load ${moduleInfo.name}`));
 
-      // Execute module
-      return this.executeModule(moduleName, code);
-    }
+      // Fast loading via GM_xmlhttpRequest
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: moduleUrl,
+        timeout: 10000, // Reduced timeout
+        onload: function (response) {
+          if (response.status === 200) {
+            try {
+              // Quick code injection
+              const fullCode = moduleWrapper.replace(
+                "// MODULE CODE WILL BE INSERTED HERE",
+                response.responseText
+              );
 
-    // Load all required modules
-    async loadAllModules() {
-      const requiredModules = Object.entries(MODULES)
-        .filter(([_, config]) => config.required)
-        .map(([name, _]) => name);
+              script.textContent = fullCode;
+              document.head.appendChild(script);
 
-      console.log("[Module Loader] Loading required modules:", requiredModules);
-
-      for (const moduleName of requiredModules) {
-        try {
-          await this.loadModule(moduleName);
-        } catch (e) {
-          console.error(
-            `[Module Loader] Failed to load required module ${moduleName}:`,
-            e
-          );
-          throw e;
-        }
-      }
-
-      console.log("[Module Loader] All modules loaded successfully");
-    }
-
-    // Clear module cache
-    clearCache() {
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith(CACHE_PREFIX)) {
-          localStorage.removeItem(key);
-        }
+              moduleState.loadedModules.add(moduleInfo.name);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          } else {
+            reject(new Error(`HTTP ${response.status} for ${moduleInfo.name}`));
+          }
+        },
+        onerror: () =>
+          reject(new Error(`Network error loading ${moduleInfo.name}`)),
+        ontimeout: () =>
+          reject(new Error(`Timeout loading ${moduleInfo.name}`)),
       });
-      console.log("[Module Loader] Module cache cleared");
-    }
+    });
   }
 
-  // ============= INITIALIZATION =============
-  async function initialize() {
-    console.log("[Ateex Modular] Starting modular script v" + VERSION);
+  // ============= OPTIMIZED SEQUENTIAL LOADING =============
 
-    const loader = new ModuleLoader();
-    window.AteexModuleLoader = loader;
+  async function loadModulesSequentially() {
+    const loadStart = Date.now();
 
+    for (const moduleInfo of MODULES) {
+      try {
+        await loadModule(moduleInfo);
+      } catch (error) {
+        console.error(`❌ Failed to load ${moduleInfo.name}:`, error.message);
+        return false;
+      }
+    }
+
+    const loadTime = Date.now() - loadStart;
+    console.log(`✅ All modules loaded in ${loadTime}ms`);
+    return true;
+  }
+
+  // ============= OPTIMIZED INITIALIZATION =============
+
+  async function initializeModules() {
     try {
-      // Load all modules
-      await loader.loadAllModules();
-
-      // Initialize core system
-      if (window.AteexModules.core && window.AteexModules.core.initialize) {
-        await window.AteexModules.core.initialize();
+      // Quick environment check
+      if (
+        window.location.protocol !== "https:" &&
+        !window.location.href.includes("recaptcha")
+      ) {
+        console.warn("⚠️ Script may not work properly on non-HTTPS pages");
       }
 
-      // Start main workflow
-      if (window.AteexModules.workflow && window.AteexModules.workflow.start) {
-        await window.AteexModules.workflow.start();
+      // Fast module loading
+      const loadSuccess = await loadModulesSequentially();
+      if (!loadSuccess) {
+        console.error("❌ Module loading failed - script stopped");
+        return;
       }
 
-      console.log("[Ateex Modular] Initialization completed successfully");
-    } catch (e) {
-      console.error("[Ateex Modular] Initialization failed:", e);
-
-      // Fallback: try to load from backup or show error
-      showErrorUI(
-        "Failed to load modules. Please check your internet connection and refresh the page."
+      // Quick validation
+      const requiredModules = ["core", "workflow"];
+      const missingCritical = requiredModules.filter(
+        name => !window.AteexModules[name]
       );
+
+      if (missingCritical.length > 0) {
+        console.error("❌ Critical modules missing:", missingCritical);
+        return;
+      }
+
+      // Fast startup
+      const initStart = Date.now();
+      await window.AteexModules.workflow.start();
+
+      const totalTime = Date.now() - moduleState.startTime;
+      console.log(`🚀 Ateex Auto Script started in ${totalTime}ms`);
+    } catch (error) {
+      console.error("❌ Initialization failed:", error);
     }
   }
 
-  // Show error UI
-  function showErrorUI(message) {
-    const errorDiv = document.createElement("div");
-    errorDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #f44336;
-            color: white;
-            padding: 15px 20px;
-            border-radius: 5px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            z-index: 99999;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        `;
-    errorDiv.innerHTML = `
-            <div style="font-weight: bold; margin-bottom: 5px;">⚠️ Ateex Modular Error</div>
-            <div>${message}</div>
-            <button onclick="location.reload()" style="
-                margin-top: 10px;
-                padding: 5px 10px;
-                border: none;
-                border-radius: 3px;
-                background: white;
-                color: #f44336;
-                cursor: pointer;
-            ">Reload Page</button>
-        `;
-    document.body.appendChild(errorDiv);
+  // ============= OPTIMIZED ERROR HANDLING =============
+
+  // Quick global error handler
+  window.addEventListener("error", function (event) {
+    if (
+      event.error &&
+      event.error.stack &&
+      event.error.stack.includes("AteexModules")
+    ) {
+      console.error("🚫 Ateex Script Error:", {
+        message: event.error.message,
+        file: event.filename,
+        line: event.lineno,
+      });
+    }
+  });
+
+  // Quick unhandled promise handler
+  window.addEventListener("unhandledrejection", function (event) {
+    if (
+      event.reason &&
+      event.reason.stack &&
+      event.reason.stack.includes("AteexModules")
+    ) {
+      console.error("🚫 Ateex Promise Error:", event.reason.message);
+      event.preventDefault(); // Prevent console spam
+    }
+  });
+
+  // ============= OPTIMIZED STARTUP =============
+
+  // Quick DOM ready check
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeModules);
+  } else {
+    // Quick startup if DOM already ready
+    setTimeout(initializeModules, 100);
   }
 
-  // Start initialization
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize);
-  } else {
-    initialize();
-  }
+  // Quick cleanup on page unload
+  window.addEventListener("beforeunload", function () {
+    window.ateexModularRunning = false;
+
+    // Quick module cleanup
+    if (window.AteexModules?.core?.state) {
+      try {
+        localStorage.setItem(
+          "ateex_last_session",
+          JSON.stringify({
+            timestamp: Date.now(),
+            url: window.location.href,
+          })
+        );
+      } catch (e) {
+        // Ignore storage errors
+      }
+    }
+  });
+
+  console.log("🚀 Ateex Auto Script (Performance Optimized) initializing...");
 })();

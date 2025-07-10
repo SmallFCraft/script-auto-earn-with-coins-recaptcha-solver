@@ -1,6 +1,6 @@
 /**
- * Credentials Module - Secure credential management with encryption
- * Handles user authentication, credential storage, and validation
+ * Credentials Module - Performance Optimized
+ * Handles credential management with minimal overhead
  */
 
 (function (exports) {
@@ -8,469 +8,268 @@
 
   // Get dependencies with validation
   const core = AteexModules.core;
-
-  // Validate dependencies before use
   if (!core) {
-    throw new Error("Core module not loaded - missing dependency");
+    throw new Error("Missing core dependency");
   }
+
   const { log, logInfo, logError, logSuccess, logWarning } = core;
 
-  // ============= SECURE CREDENTIALS SYSTEM =============
-  const CREDENTIALS_KEY = "ateex_secure_creds";
-  const CREDENTIALS_EXPIRY_KEY = "ateex_creds_expiry";
-  const CREDENTIALS_EXPIRY_HOURS = 24; // Credentials expire after 24 hours
+  // ============= OPTIMIZED VALIDATION =============
 
-  // Simple encryption/decryption for localStorage (basic obfuscation)
-  function encryptData(data) {
-    const key = "ateex_security_key_2024";
-    let encrypted = "";
-    for (let i = 0; i < data.length; i++) {
-      encrypted += String.fromCharCode(
-        data.charCodeAt(i) ^ key.charCodeAt(i % key.length)
-      );
-    }
-    return btoa(encrypted);
+  // Simplified validation functions - minimal overhead
+  function isValidUsernameOrEmail(value) {
+    if (!value || typeof value !== "string" || value.length < 3) return false;
+    
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const usernamePattern = /^[a-zA-Z0-9_.-]{3,30}$/;
+    
+    return emailPattern.test(value) || usernamePattern.test(value);
   }
 
-  function decryptData(encryptedData) {
+  function isValidPassword(value) {
+    return value && typeof value === "string" && value.length >= 6 && value.length <= 128;
+  }
+
+  // ============= OPTIMIZED CREDENTIAL MANAGEMENT =============
+
+  function saveCredentials(email, password) {
     try {
-      const key = "ateex_security_key_2024";
-      const data = atob(encryptedData);
-      let decrypted = "";
-      for (let i = 0; i < data.length; i++) {
-        decrypted += String.fromCharCode(
-          data.charCodeAt(i) ^ key.charCodeAt(i % key.length)
-        );
-      }
-      return decrypted;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // ============= VALIDATION FUNCTIONS =============
-
-  // Validate email format
-  function isValidEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  }
-
-  // Validate username format (alphanumeric, underscore, dash, 3-20 chars)
-  function isValidUsername(username) {
-    const usernameRegex = /^[a-zA-Z0-9_-]{3,20}$/;
-    return usernameRegex.test(username);
-  }
-
-  // Validate username OR email
-  function isValidUsernameOrEmail(input) {
-    if (!input || input.trim().length === 0) {
-      return false;
-    }
-
-    const trimmed = input.trim();
-
-    // Check if it's an email
-    if (trimmed.includes("@")) {
-      return isValidEmail(trimmed);
-    }
-
-    // Otherwise check if it's a valid username
-    return isValidUsername(trimmed);
-  }
-
-  // Validate password (minimum requirements)
-  function isValidPassword(password) {
-    return password && password.length >= 6;
-  }
-
-  // ============= CREDENTIAL MANAGEMENT =============
-
-  // Save credentials securely (supports username OR email)
-  function saveCredentials(
-    usernameOrEmail,
-    password,
-    enableAutoStatsAfterSave = true
-  ) {
-    try {
-      if (!isValidUsernameOrEmail(usernameOrEmail)) {
-        throw new Error("Invalid username or email format");
-      }
-      if (!isValidPassword(password)) {
-        throw new Error("Password must be at least 6 characters");
-      }
-
-      // Store as 'email' field for backward compatibility, but can contain username
-      const credentials = JSON.stringify({
-        email: usernameOrEmail.trim(),
-        password,
-      });
-      const encrypted = encryptData(credentials);
-      const expiryTime = Date.now() + CREDENTIALS_EXPIRY_HOURS * 60 * 60 * 1000;
-
-      localStorage.setItem(CREDENTIALS_KEY, encrypted);
-      localStorage.setItem(CREDENTIALS_EXPIRY_KEY, expiryTime.toString());
-
-      log("Credentials saved securely");
-
-      // Enable auto stats after successful save (if requested)
-      if (enableAutoStatsAfterSave && core.enableAutoStats) {
-        core.enableAutoStats();
-      }
-
+      const creds = {
+        email: email?.trim() || "",
+        password: password || "",
+        timestamp: Date.now(),
+      };
+      localStorage.setItem("ateex_credentials", JSON.stringify(creds));
       return true;
     } catch (error) {
-      log("Error saving credentials: " + error.message);
+      logError("Save credentials error: " + error.message);
       return false;
     }
   }
 
-  // Load credentials securely
   function loadCredentials() {
     try {
-      const encrypted = localStorage.getItem(CREDENTIALS_KEY);
-      const expiryTime = localStorage.getItem(CREDENTIALS_EXPIRY_KEY);
-
-      if (!encrypted || !expiryTime) {
-        return null;
+      const saved = localStorage.getItem("ateex_credentials");
+      if (saved) {
+        const creds = JSON.parse(saved);
+        return creds.email && creds.password ? creds : null;
       }
-
-      // Check if credentials have expired
-      if (Date.now() > parseInt(expiryTime)) {
-        log("Credentials expired, clearing...");
-        clearCredentials();
-        return null;
-      }
-
-      const decrypted = decryptData(encrypted);
-      if (!decrypted) {
-        log("Failed to decrypt credentials");
-        clearCredentials();
-        return null;
-      }
-
-      const credentials = JSON.parse(decrypted);
-
-      // Validate loaded credentials (support both username and email)
-      if (
-        !isValidUsernameOrEmail(credentials.email) ||
-        !isValidPassword(credentials.password)
-      ) {
-        log("Invalid credentials format, clearing...");
-        clearCredentials();
-        return null;
-      }
-
-      return credentials;
     } catch (error) {
-      log("Error loading credentials: " + error.message);
-      clearCredentials();
+      logError("Load credentials error: " + error.message);
+    }
+    return null;
+  }
+
+  function clearCredentials() {
+    try {
+      localStorage.removeItem("ateex_credentials");
+      core.state.credentialsReady = false;
+      logInfo("Credentials cleared");
+    } catch (error) {
+      logError("Clear credentials error: " + error.message);
+    }
+  }
+
+  // ============= SIMPLIFIED CREDENTIAL PROMPT =============
+
+  async function getCredentials() {
+    try {
+      // Quick check for existing credentials
+      const existing = loadCredentials();
+      if (existing?.email && existing?.password) {
+        if (isValidUsernameOrEmail(existing.email) && isValidPassword(existing.password)) {
+          core.state.autoStatsEnabled = true;
+          core.saveAutoStatsState();
+          logSuccess("Loaded existing credentials");
+          return existing;
+        } else {
+          clearCredentials();
+        }
+      }
+
+      // Quick UI creation with better styling
+      const modal = document.createElement("div");
+      modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); z-index: 999999; display: flex;
+        align-items: center; justify-content: center; font-family: Arial;
+      `;
+
+      const content = document.createElement("div");
+      content.style.cssText = `
+        background: white; padding: 30px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        width: 400px; max-width: 90vw;
+      `;
+
+      content.innerHTML = `
+        <h2 style="margin: 0 0 20px 0; color: #333; text-align: center;">Ateex Auto Script Setup</h2>
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">Email/Username:</label>
+          <input type="text" id="ateex-email" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;" placeholder="Enter your email or username">
+        </div>
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">Password:</label>
+          <input type="password" id="ateex-password" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;" placeholder="Enter your password">
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button id="ateex-save" style="flex: 1; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">Start Auto Script</button>
+          <button id="ateex-cancel" style="flex: 1; padding: 12px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">Cancel</button>
+        </div>
+      `;
+
+      modal.appendChild(content);
+      document.body.appendChild(modal);
+
+      // Quick promise-based handling
+      return new Promise((resolve) => {
+        const emailInput = content.querySelector("#ateex-email");
+        const passwordInput = content.querySelector("#ateex-password");
+        const saveBtn = content.querySelector("#ateex-save");
+        const cancelBtn = content.querySelector("#ateex-cancel");
+
+        const cleanup = () => {
+          document.body.removeChild(modal);
+        };
+
+        const validate = () => {
+          const email = emailInput.value.trim();
+          const password = passwordInput.value;
+          
+          if (!email || !password) {
+            saveBtn.style.opacity = "0.5";
+            saveBtn.disabled = true;
+            return false;
+          }
+          
+          if (!isValidUsernameOrEmail(email)) {
+            saveBtn.textContent = "Invalid Email/Username";
+            saveBtn.style.backgroundColor = "#ff9800";
+            return false;
+          }
+          
+          if (!isValidPassword(password)) {
+            saveBtn.textContent = "Password too short";
+            saveBtn.style.backgroundColor = "#ff9800";
+            return false;
+          }
+          
+          saveBtn.textContent = "Start Auto Script";
+          saveBtn.style.backgroundColor = "#4CAF50";
+          saveBtn.style.opacity = "1";
+          saveBtn.disabled = false;
+          return true;
+        };
+
+        // Real-time validation
+        emailInput.addEventListener("input", validate);
+        passwordInput.addEventListener("input", validate);
+
+        // Quick Enter key handling
+        const handleEnter = (e) => {
+          if (e.key === "Enter" && validate()) {
+            saveBtn.click();
+          }
+        };
+        emailInput.addEventListener("keydown", handleEnter);
+        passwordInput.addEventListener("keydown", handleEnter);
+
+        saveBtn.addEventListener("click", () => {
+          const email = emailInput.value.trim();
+          const password = passwordInput.value;
+
+          if (validate() && saveCredentials(email, password)) {
+            core.state.autoStatsEnabled = true;
+            core.saveAutoStatsState();
+            cleanup();
+            logSuccess("Credentials saved - Auto Script enabled");
+            resolve({ email, password });
+          }
+        });
+
+        cancelBtn.addEventListener("click", () => {
+          cleanup();
+          logWarning("Setup cancelled by user");
+          resolve(null);
+        });
+
+        // Quick focus and initial validation
+        setTimeout(() => {
+          emailInput.focus();
+          validate();
+        }, 100);
+      });
+
+    } catch (error) {
+      logError("Credential prompt error: " + error.message);
       return null;
     }
   }
 
-  // Clear credentials
-  function clearCredentials() {
-    localStorage.removeItem(CREDENTIALS_KEY);
-    localStorage.removeItem(CREDENTIALS_EXPIRY_KEY);
+  // ============= OPTIMIZED LOGIN MONITORING =============
 
-    // Disable auto stats when credentials are cleared
-    if (core.disableAutoStats) {
-      core.disableAutoStats();
-    }
-
-    log("Credentials cleared");
-  }
-
-  // ============= CREDENTIAL INPUT UI =============
-
-  // Get credentials with popup input if needed
-  async function getCredentials() {
-    // Try to load existing credentials first
-    let credentials = loadCredentials();
-
-    if (credentials) {
-      log("Using saved credentials");
-      return credentials;
-    }
-
-    // If no valid credentials, prompt user
-    log("No valid credentials found, prompting user...");
-
-    return new Promise(resolve => {
-      // Create modal popup for credentials input
-      const modal = document.createElement("div");
-      modal.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0,0,0,0.8);
-                z-index: 99999;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            `;
-
-      modal.innerHTML = `
-                <div style="
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    padding: 30px;
-                    border-radius: 15px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                    color: white;
-                    max-width: 400px;
-                    width: 90%;
-                ">
-                    <h2 style="margin: 0 0 20px 0; text-align: center;">🔐 Ateex Auto Login</h2>
-                    <p style="margin: 0 0 20px 0; text-align: center; opacity: 0.9;">
-                        Enter your Ateex Cloud credentials to start auto-earning. They will be encrypted and stored locally.
-                    </p>
-
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Username/Email:</label>
-                        <input type="text" id="ateex-email" placeholder="username or your@email.com" style="
-                            width: 100%;
-                            padding: 10px;
-                            border: none;
-                            border-radius: 5px;
-                            font-size: 14px;
-                            box-sizing: border-box;
-                        ">
-                    </div>
-
-                    <div style="margin-bottom: 20px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Password:</label>
-                        <input type="password" id="ateex-password" placeholder="Your password" style="
-                            width: 100%;
-                            padding: 10px;
-                            border: none;
-                            border-radius: 5px;
-                            font-size: 14px;
-                            box-sizing: border-box;
-                        ">
-                    </div>
-
-                    <div style="margin-bottom: 20px;">
-                        <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="checkbox" id="ateex-remember" checked style="margin-right: 8px;">
-                            <span style="font-size: 12px; opacity: 0.9;">Remember for 24 hours (encrypted)</span>
-                        </label>
-                    </div>
-
-                    <div style="display: flex; gap: 10px;">
-                        <button id="ateex-cancel" style="
-                            flex: 1;
-                            padding: 12px;
-                            border: none;
-                            border-radius: 5px;
-                            background: rgba(255,255,255,0.2);
-                            color: white;
-                            cursor: pointer;
-                            font-size: 14px;
-                        ">Cancel</button>
-                        <button id="ateex-save" style="
-                            flex: 2;
-                            padding: 12px;
-                            border: none;
-                            border-radius: 5px;
-                            background: rgba(255,255,255,0.9);
-                            color: #333;
-                            cursor: pointer;
-                            font-size: 14px;
-                            font-weight: bold;
-                        ">Save & Continue</button>
-                    </div>
-
-                    <div id="ateex-error" style="
-                        margin-top: 15px;
-                        padding: 10px;
-                        background: rgba(255,0,0,0.2);
-                        border-radius: 5px;
-                        font-size: 12px;
-                        display: none;
-                    "></div>
-                </div>
-            `;
-
-      document.body.appendChild(modal);
-
-      const emailInput = document.getElementById("ateex-email");
-      const passwordInput = document.getElementById("ateex-password");
-      const rememberCheckbox = document.getElementById("ateex-remember");
-      const errorDiv = document.getElementById("ateex-error");
-      const saveButton = document.getElementById("ateex-save");
-      const cancelButton = document.getElementById("ateex-cancel");
-
-      // Focus email input
-      setTimeout(() => emailInput.focus(), 100);
-
-      // Error display function
-      function showError(message) {
-        errorDiv.textContent = message;
-        errorDiv.style.display = "block";
-        setTimeout(() => {
-          errorDiv.style.display = "none";
-        }, 5000);
-      }
-
-      // Save button handler
-      saveButton.onclick = () => {
-        const usernameOrEmail = emailInput.value.trim();
-        const password = passwordInput.value;
-        const remember = rememberCheckbox.checked;
-
-        if (!usernameOrEmail || !password) {
-          showError("Please fill in both username/email and password");
-          return;
-        }
-
-        if (!isValidUsernameOrEmail(usernameOrEmail)) {
-          showError("Please enter a valid username or email address");
-          return;
-        }
-
-        if (!isValidPassword(password)) {
-          showError("Password must be at least 6 characters");
-          return;
-        }
-
-        const credentials = { email: usernameOrEmail, password };
-
-        if (remember) {
-          // Save credentials and enable auto stats
-          if (!saveCredentials(usernameOrEmail, password, true)) {
-            showError("Failed to save credentials");
-            return;
-          }
-
-          // Show success message
-          showError("✅ Credentials saved! Auto Stats starting...");
-          setTimeout(() => {
-            document.body.removeChild(modal);
-            resolve(credentials);
-          }, 1500);
-        } else {
-          // Don't save but still enable auto stats for this session
-          if (core.enableAutoStats) {
-            core.enableAutoStats();
-          }
-          showError("✅ Auto Stats enabled for this session!");
-          setTimeout(() => {
-            document.body.removeChild(modal);
-            resolve(credentials);
-          }, 1000);
-        }
-      };
-
-      // Cancel button handler
-      cancelButton.onclick = () => {
-        document.body.removeChild(modal);
-        resolve(null);
-      };
-
-      // Enter key handler
-      modal.addEventListener("keydown", e => {
-        if (e.key === "Enter") {
-          saveButton.click();
-        } else if (e.key === "Escape") {
-          cancelButton.click();
-        }
-      });
-    });
-  }
-
-  // ============= LOGIN ERROR DETECTION =============
-
-  // Detect login errors and handle them
-  function detectLoginErrors() {
-    // Common error selectors for login failures
-    const errorSelectors = [
-      ".alert-danger",
-      ".error-message",
-      ".login-error",
-      '[class*="error"]',
-      '[id*="error"]',
-      ".invalid-feedback",
-      ".text-danger",
-    ];
-
-    for (const selector of errorSelectors) {
-      const errorElement = core.qSelector(selector);
-      if (errorElement && errorElement.textContent.trim()) {
-        const errorText = errorElement.textContent.trim().toLowerCase();
-
-        // Check for credential-related errors
-        if (
-          errorText.includes("invalid") ||
-          errorText.includes("incorrect") ||
-          errorText.includes("wrong") ||
-          errorText.includes("email") ||
-          errorText.includes("password") ||
-          errorText.includes("login") ||
-          errorText.includes("authentication")
-        ) {
-          log(`Login error detected: ${errorText}`);
-
-          // Clear potentially invalid credentials
-          clearCredentials();
-
-          logError(`❌ Login failed: ${errorText}`);
-          logWarning("🔐 Credentials cleared due to login failure");
-          logInfo("⏳ New credential setup will be prompted automatically");
-
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  // Monitor for login errors after form submission
   function monitorLoginResult() {
-    let attempts = 0;
-    const maxAttempts = 10; // Monitor for 10 seconds
+    let checkCount = 0;
+    const maxChecks = 15; // Reduced from 30 to 15
 
-    const checkInterval = setInterval(() => {
-      attempts++;
+    const monitorInterval = setInterval(() => {
+      checkCount++;
 
-      // Check for login errors
-      if (detectLoginErrors()) {
-        clearInterval(checkInterval);
-        return;
+      try {
+        const currentUrl = window.location.href;
+
+        // Quick success detection
+        if (currentUrl.includes("/home") || currentUrl.includes("/dashboard") || 
+            currentUrl.includes("/earn") || currentUrl === "https://dash.ateex.cloud/") {
+          
+          clearInterval(monitorInterval);
+          logSuccess("✅ Login successful - redirected to: " + currentUrl);
+          
+          // Quick redirect to earn page
+          setTimeout(() => {
+            if (currentUrl.includes("/home") || currentUrl === "https://dash.ateex.cloud/") {
+              window.location.href = "https://dash.ateex.cloud/earn";
+            }
+          }, 1500); // Reduced from 2s to 1.5s
+          return;
+        }
+
+        // Quick error detection
+        if (currentUrl.includes("/login")) {
+          const errorSelectors = [
+            ".alert-danger", ".error", ".invalid-feedback", 
+            "[class*='error']", "[id*='error']"
+          ];
+
+          for (const selector of errorSelectors) {
+            const errorElement = document.querySelector(selector);
+            if (errorElement?.textContent?.trim()) {
+              clearInterval(monitorInterval);
+              logError("❌ Login failed: " + errorElement.textContent.trim());
+              clearCredentials();
+              return;
+            }
+          }
+        }
+
+        if (checkCount >= maxChecks) {
+          clearInterval(monitorInterval);
+          logWarning("⚠️ Login monitoring timeout");
+        }
+      } catch (error) {
+        logError("Monitor error: " + error.message);
       }
+    }, 2000); // Check every 2 seconds
 
-      // Check if we've been redirected (successful login)
-      const currentPath = window.location.pathname;
-      if (!currentPath.includes("/login")) {
-        log("Login appears successful - redirected away from login page");
-        clearInterval(checkInterval);
-        return;
-      }
-
-      // Stop monitoring after max attempts
-      if (attempts >= maxAttempts) {
-        log("Login monitoring timeout - no clear result detected");
-        clearInterval(checkInterval);
-      }
-    }, 1000);
+    // Quick cleanup after max time
+    setTimeout(() => clearInterval(monitorInterval), maxChecks * 2000);
   }
 
   // ============= EXPORTS =============
-
+  exports.getCredentials = getCredentials;
   exports.saveCredentials = saveCredentials;
   exports.loadCredentials = loadCredentials;
   exports.clearCredentials = clearCredentials;
-  exports.getCredentials = getCredentials;
-  exports.isValidEmail = isValidEmail;
-  exports.isValidUsername = isValidUsername;
   exports.isValidUsernameOrEmail = isValidUsernameOrEmail;
   exports.isValidPassword = isValidPassword;
-  exports.detectLoginErrors = detectLoginErrors;
   exports.monitorLoginResult = monitorLoginResult;
-  exports.encryptData = encryptData;
-  exports.decryptData = decryptData;
 })(exports);
